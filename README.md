@@ -1,10 +1,10 @@
 # Splunk MCP Server
 
-A Model Context Protocol (MCP) server that provides seamless integration with Splunk for log access, search, and analysis capabilities within Cline and other MCP-compatible tools.
+A Model Context Protocol (MCP) server that provides seamless integration with Splunk for log access, search, and analysis capabilities within MCP compatible llm agents.
 
 ## Overview
 
-This MCP server enables direct interaction with Splunk instances, allowing you to search logs, retrieve data, and perform analytics operations without leaving your development environment. It's designed to bridge the gap between your coding workflow and log analysis needs.
+This MCP server enables direct interaction with Splunk instances, allowing llm agents to search logs, retrieve data, and perform analytics operations without leaving the development environment. It's designed to bridge the gap between coding workflow and log analysis needs.
 
 ## Features
 
@@ -17,6 +17,7 @@ This MCP server enables direct interaction with Splunk instances, allowing you t
 - **Saved Search Management**: Access and execute saved searches
 - **Field Extraction**: Extract and analyze specific fields from search results
 - **Export Functionality**: Export search results in various formats (CSV, JSON, XML)
+- **Bi-directional Log analysis**: Support for bidirectional call from and to the llm agent for log analysis and realtime error fixing
 
 ### Planned Features (Future Improvements)
 
@@ -299,22 +300,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - **Issues**: Report bugs and feature requests on [GitHub Issues](https://github.com/shibbirmcc/splunk-mcp-server/issues)
 - **Documentation**: Visit our [Wiki](https://github.com/shibbirmcc/splunk-mcp-server/wiki)
 - **Community**: Join discussions in [GitHub Discussions](https://github.com/shibbirmcc/splunk-mcp-server/discussions)
-
-## Changelog
-
-### v1.0.0 (Planned)
-- Initial release with basic search functionality
-- Index listing and management
-- Saved search execution
-- Export capabilities
-- Basic authentication support
-
-### Future Releases
-- Dashboard integration
-- Advanced analytics
-- Real-time streaming
-- Enhanced security features
-- Performance optimizations
 
 ---
 

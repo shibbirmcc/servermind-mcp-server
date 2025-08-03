@@ -7,10 +7,6 @@ name = "splunk-mcp-server"
 version = "1.0.0"
 description = "A Model Context Protocol (MCP) server that provides seamless integration with Splunk for log access, search, and analysis capabilities"
 readme = "README.md"
-license = {text = "MIT"}
-authors = [
-    {name = "shibbirmcc", email = "shibbirmcc@users.noreply.github.com"}
-]
 keywords = ["mcp", "splunk", "logs", "search", "analytics", "model-context-protocol"]
 classifiers = [
     "Development Status :: 4 - Beta",
