@@ -35,7 +35,7 @@ This MCP server enables direct interaction with Splunk instances, allowing you t
 
 ### Prerequisites
 
-- Node.js 18+ or Python 3.8+
+- Python 3.8+
 - Access to a Splunk instance (Enterprise or Cloud)
 - Valid Splunk credentials with appropriate permissions
 
@@ -47,10 +47,10 @@ git clone https://github.com/shibbirmcc/splunk-mcp-server.git
 cd splunk-mcp-server
 ```
 
-2. Install dependencies:
+2. Create a virtual environment and install dependencies:
 ```bash
-npm install
-# or
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
@@ -62,9 +62,7 @@ cp config.example.json config.json
 
 4. Start the MCP server:
 ```bash
-npm start
-# or
-python main.py
+python src/server.py
 ```
 
 ## Configuration
@@ -201,27 +199,29 @@ const result = await mcpClient.callTool('splunk_search', {
 ```
 splunk-mcp-server/
 ├── src/
-│   ├── server.js          # Main MCP server implementation
+│   ├── server.py          # Main MCP server implementation
 │   ├── splunk/
-│   │   ├── client.js      # Splunk API client
-│   │   ├── search.js      # Search functionality
-│   │   └── utils.js       # Utility functions
+│   │   ├── __init__.py
+│   │   ├── client.py      # Splunk API client
+│   │   ├── search.py      # Search functionality
+│   │   └── utils.py       # Utility functions
 │   └── tools/
-│       ├── search.js      # Search tool implementation
-│       ├── indexes.js     # Index management tools
-│       └── export.js      # Export functionality
+│       ├── __init__.py
+│       ├── search.py      # Search tool implementation
+│       ├── indexes.py     # Index management tools
+│       └── export.py      # Export functionality
 ├── tests/
+│   ├── __init__.py
 │   ├── unit/              # Unit tests
 │   └── integration/       # Integration tests
 ├── docs/                  # Documentation
 ├── config.example.json    # Example configuration
-└── package.json
+├── requirements.txt       # Python dependencies
+└── pyproject.toml         # Python project configuration
 ```
 
 ### Running Tests
 ```bash
-npm test
-# or
 python -m pytest tests/
 ```
 
