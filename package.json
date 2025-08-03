@@ -1,0 +1,46 @@
+{
+  "name": "splunk-mcp-server",
+  "version": "1.0.0",
+  "description": "A Model Context Protocol (MCP) server that provides seamless integration with Splunk for log access, search, and analysis capabilities",
+  "main": "src/server.js",
+  "scripts": {
+    "test": "jest",
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "keywords": [
+    "mcp",
+    "splunk",
+    "logs",
+    "search",
+    "analytics",
+    "model-context-protocol"
+  ],
+  "author": "shibbirmcc",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shibbirmcc/splunk-mcp-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/shibbirmcc/splunk-mcp-server/issues"
+  },
+  "homepage": "https://github.com/shibbirmcc/splunk-mcp-server#readme",
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.2"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.4.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "collectCoverage": true,
+    "coverageDirectory": "coverage",
+    "coverageReporters": ["text", "lcov", "html"],
+    "testMatch": ["**/tests/**/*.test.js"]
+  }
+}
