@@ -72,4 +72,18 @@ describe('README.md', () => {
     expect(readmeContent).toContain('## Changelog');
     expect(readmeContent).toContain('v1.0.0');
   });
+
+  test('should reference Python as primary language', () => {
+    expect(readmeContent).toContain('Python 3.8+');
+    expect(readmeContent).toContain('python src/server.py');
+    expect(readmeContent).toContain('requirements.txt');
+    expect(readmeContent).toContain('pyproject.toml');
+  });
+
+  test('should contain Python project structure', () => {
+    expect(readmeContent).toContain('server.py');
+    expect(readmeContent).toContain('client.py');
+    expect(readmeContent).toContain('__init__.py');
+    expect(readmeContent).toContain('python -m pytest tests/');
+  });
 });
