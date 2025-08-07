@@ -11,7 +11,6 @@ import sys
 from typing import Any, Sequence
 import structlog
 from mcp.server import Server
-from mcp.server.stdio import stdio_server
 from mcp.types import (
     CallToolRequest,
     ListToolsRequest,
@@ -25,6 +24,7 @@ from mcp.types import (
 from .config import get_config, Config
 from .tools.search import get_search_tool, execute_search
 from .splunk.client import SplunkClient, SplunkConnectionError
+from .transport.sse import SSETransport
 
 # Configure structured logging
 structlog.configure(
@@ -230,14 +230,10 @@ class SplunkMCPServer:
             # Test Splunk connection on startup
             await self._test_initial_connection()
             
-            # Run the server
-            async with stdio_server() as (read_stream, write_stream):
-                logger.info("MCP server running on stdio")
-                await self.server.run(
-                    read_stream,
-                    write_stream,
-                    self.server.create_initialization_options()
-                )
+            # Create and run SSE transport
+            sse_transport = SSETransport(self.server, host="127.0.0.1", port=8000)
+            logger.info("MCP server running on SSE transport", host="127.0.0.1", port=8000)
+            await sse_transport.run()
                 
         except KeyboardInterrupt:
             logger.info("Server shutdown requested")
