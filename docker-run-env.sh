@@ -125,7 +125,7 @@ run_container() {
     # Run container
     docker run -d \
         --name "$CONTAINER_NAME" \
-        --network host \
+        -p 8000:8000 \
         $ENV_ARGS \
         "$IMAGE_NAME"
     

@@ -23,7 +23,11 @@ services:
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     
-    # For stdio communication with MCP clients
+    # Port mapping for SSE transport
+    ports:
+      - "8000:8000"
+    
+    # For stdio communication with MCP clients (kept for backward compatibility)
     stdin_open: true
     tty: true
     

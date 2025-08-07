@@ -123,7 +123,7 @@ run_persistent_container() {
     # Run container in persistent mode (keeps running)
     docker run -d \
         --name "$CONTAINER_NAME" \
-        --network host \
+        -p 8000:8000 \
         $ENV_ARGS \
         "$IMAGE_NAME" \
         tail -f /dev/null

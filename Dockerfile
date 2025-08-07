@@ -39,8 +39,8 @@ ENV MCP_MAX_RESULTS_DEFAULT=100
 ENV MCP_SEARCH_TIMEOUT=300
 ENV LOG_LEVEL=INFO
 
-# Expose port (though MCP uses stdio, this is for potential future HTTP support)
-EXPOSE 8080
+# Expose port for SSE transport
+EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

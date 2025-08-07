@@ -122,13 +122,25 @@ docker run --rm -i \
   splunk-mcp-server
 ```
 
+## Transport Options
+
+The MCP server supports two transport mechanisms:
+
+### 1. STDIO Transport (Default for Docker)
+Traditional stdin/stdout communication for direct MCP client integration.
+
+### 2. SSE Transport (Server-Sent Events)
+HTTP-based transport using Server-Sent Events for web-based clients and environments that require HTTP communication.
+
+When using SSE transport, the server exposes port 8000 for HTTP connections.
+
 ## Cline Integration
 
 ### Configuration for Cline
 
-To use the Dockerized MCP server with Cline, add this configuration to your MCP client settings:
+#### Option 1: STDIO Transport (Recommended)
 
-#### Option 1: Using Docker Run
+For traditional MCP integration using stdin/stdout:
 
 ```json
 {
@@ -147,7 +159,33 @@ To use the Dockerized MCP server with Cline, add this configuration to your MCP 
 }
 ```
 
-#### Option 2: Using Docker Compose
+#### Option 2: SSE Transport
+
+For HTTP-based communication using Server-Sent Events:
+
+```json
+{
+  "mcpServers": {
+    "splunk": {
+      "transport": {
+        "type": "sse",
+        "url": "http://127.0.0.1:8000"
+      }
+    }
+  }
+}
+```
+
+First, start the container with port mapping:
+```bash
+# Using docker-compose (port 8000 is automatically exposed)
+./docker-run.sh run
+
+# Or using docker directly
+docker run -d -p 8000:8000 --env-file .env splunk-mcp-server
+```
+
+#### Option 3: Using Docker Compose
 
 ```json
 {
@@ -164,7 +202,7 @@ To use the Dockerized MCP server with Cline, add this configuration to your MCP 
 }
 ```
 
-#### Option 3: Using the Deployment Script
+#### Option 4: Using the Deployment Script
 
 ```json
 {
