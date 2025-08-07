@@ -176,14 +176,16 @@ For HTTP-based communication using Server-Sent Events:
 }
 ```
 
-First, start the container with port mapping:
+First, start the container (uses host networking for Splunk connectivity):
 ```bash
-# Using docker-compose (port 8000 is automatically exposed)
+# Using docker-compose (SSE transport available on host port 8000)
 ./docker-run.sh run
 
-# Or using docker directly
-docker run -d -p 8000:8000 --env-file .env splunk-mcp-server
+# Or using docker directly with host networking
+docker run -d --network host --env-file .env splunk-mcp-server
 ```
+
+Note: The container uses host networking to ensure connectivity to external Splunk servers. The SSE transport will be available on localhost:8000.
 
 #### Option 3: Using Docker Compose
 

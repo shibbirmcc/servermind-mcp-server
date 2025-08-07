@@ -23,9 +23,8 @@ services:
       # Logging
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     
-    # Port mapping for SSE transport
-    ports:
-      - "8000:8000"
+    # Use host networking for Splunk connectivity
+    network_mode: host
     
     # For stdio communication with MCP clients (kept for backward compatibility)
     stdin_open: true
