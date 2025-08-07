@@ -231,8 +231,8 @@ class SplunkMCPServer:
             await self._test_initial_connection()
             
             # Create and run SSE transport
-            sse_transport = SSETransport(self.server, host="127.0.0.1", port=8000)
-            logger.info("MCP server running on SSE transport", host="127.0.0.1", port=8000)
+            sse_transport = SSETransport(self.server, host="127.0.0.1", port=9090)
+            logger.info("MCP server running on SSE transport", host="127.0.0.1", port=9090)
             await sse_transport.run()
                 
         except KeyboardInterrupt:

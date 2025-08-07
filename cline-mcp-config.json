@@ -1,19 +1,17 @@
 {
   "mcpServers": {
     "splunk-mcp-server": {
-      "transport": {
-        "type": "sse",
-        "url": "http://127.0.0.1:8000"
-      },
+      "url": "http://127.0.0.1:9090",
       "env": {
         "SPLUNK_HOST": "127.0.0.1",
-        "SPLUNK_TOKEN": "eyJraWQiOiJzcGx1bmsuc2VjcmV0IiwiYWxnIjoiSFM1MTIiLCJ2ZXIiOiJ2MiIsInR0eXAiOiJzdGF0aWMifQ.eyJpc3MiOiJhZG1pbiBmcm9tIDhhNTQ1YWZiZjVhNiIsInN1YiI6ImFkbWluIiwiYXVkIjoibWNwLXRva2VuIiwiaWRwIjoiU3BsdW5rIiwianRpIjoiYmZjZjMxMDgwZmU2YWM1YzQ3MTYxNjY4ZmQzODRmMzFhMjJlYzYyNTc0NTA1ZWFjYmNkOTE2MjcwNDRiZGI2YSIsImlhdCI6MTc1NDU4NDI3MSwiZXhwIjoxNzg4MjEzNTg2LCJuYnIiOjE3NTQ1ODQyNzF9.2FRE8NXKxmjUF_64zBJzncf59aBWcyOV74HMNndprvpz47TR11GnNLvEoibvQq_oAokN5M6hrBGXCfu7fF2N_A",
+        "SPLUNK_TOKEN": "...",
         "SPLUNK_PORT": "8089",
         "SPLUNK_SCHEME": "https",
         "SPLUNK_VERIFY_SSL": "false",
         "SPLUNK_TIMEOUT": "30",
         "LOG_LEVEL": "INFO"
-      }
+      },
+      "disabled": false
     }
   }
 }
