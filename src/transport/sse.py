@@ -14,7 +14,10 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import StreamingResponse
 from sse_starlette import EventSourceResponse
 from mcp.server import Server
-from mcp.types import JSONRPCMessage, JSONRPCRequest, JSONRPCResponse, JSONRPCError
+from mcp.types import (
+    JSONRPCMessage, JSONRPCRequest, JSONRPCResponse, JSONRPCError,
+    ListToolsRequest, CallToolRequest, ListResourcesRequest, ReadResourceRequest
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -109,12 +112,21 @@ class SSETransport:
                         "data": json.dumps({"error": str(e)})
                     }
                 finally:
-                    # Clean up client
-                    if client_id in self.clients:
-                        del self.clients[client_id]
-                    logger.info("SSE client cleaned up", client_id=client_id)
+                    # Don't immediately clean up client - let it persist for message sending
+                    # Client will be cleaned up by timeout or explicit disconnect
+                    logger.info("SSE connection closed, but keeping client registered", client_id=client_id)
             
             return EventSourceResponse(event_generator())
+        
+        @self.app.post("/disconnect/{client_id}")
+        async def disconnect(client_id: str):
+            """Disconnect a client and clean up resources."""
+            if client_id in self.clients:
+                del self.clients[client_id]
+                logger.info("Client disconnected and cleaned up", client_id=client_id)
+                return {"status": "disconnected"}
+            else:
+                raise HTTPException(status_code=404, detail="Client not found")
         
         @self.app.post("/message/{client_id}")
         async def handle_message(client_id: str, request: Request):
@@ -196,50 +208,67 @@ class SSETransport:
             
             logger.info("Processing MCP request", method=method, id=request.id)
             
-            # Route to appropriate handler based on the server's registered handlers
+            # Call the appropriate handler method directly
             result = None
             
             if method == "tools/list":
-                # Call the server's list_tools handler
-                if hasattr(self.server, '_list_tools_handler') and self.server._list_tools_handler:
-                    result = await self.server._list_tools_handler()
-                else:
-                    result = []
+                # Get the tools from the server's registered handlers
+                tools = []
+                # Access the server's tool handlers through the decorator registry
+                if hasattr(self.server, '_tool_handlers') and self.server._tool_handlers:
+                    for tool_name, handler in self.server._tool_handlers.items():
+                        if hasattr(handler, 'get_tool_definition'):
+                            tools.append(handler.get_tool_definition())
+                
+                # If no tools found through handlers, try the direct approach
+                if not tools:
+                    # Import and get tools directly
+                    from ..tools.search import get_tool_definition
+                    tools = [get_tool_definition()]
+                
+                result = {"tools": [tool.model_dump() if hasattr(tool, 'model_dump') else tool for tool in tools]}
+                
             elif method == "tools/call":
-                # Call the server's call_tool handler
-                if hasattr(self.server, '_call_tool_handler') and self.server._call_tool_handler:
-                    result = await self.server._call_tool_handler(params.get("name"), params.get("arguments", {}))
+                tool_name = params.get("name")
+                arguments = params.get("arguments", {})
+                
+                if tool_name == "splunk_search":
+                    from ..tools.search import execute_search
+                    content = await execute_search(arguments)
+                    result = {"content": [c.model_dump() if hasattr(c, 'model_dump') else c for c in content]}
                 else:
-                    raise ValueError(f"Tool not found: {params.get('name')}")
+                    raise ValueError(f"Unknown tool: {tool_name}")
+                    
             elif method == "resources/list":
-                # Call the server's list_resources handler
-                if hasattr(self.server, '_list_resources_handler') and self.server._list_resources_handler:
-                    result = await self.server._list_resources_handler()
-                else:
-                    result = []
+                # Get resources from the server
+                resources = []
+                # For now, return empty list - can be extended later
+                result = {"resources": resources}
+                
             elif method == "resources/read":
-                # Call the server's read_resource handler
-                if hasattr(self.server, '_read_resource_handler') and self.server._read_resource_handler:
-                    result = await self.server._read_resource_handler(params.get("uri"))
-                else:
-                    raise ValueError(f"Resource not found: {params.get('uri')}")
+                uri = params.get("uri")
+                # For now, return error - can be extended later
+                raise ValueError(f"Resource not found: {uri}")
             else:
                 raise ValueError(f"Unknown method: {method}")
             
             return JSONRPCResponse(
+                jsonrpc="2.0",
                 id=request.id,
                 result=result
             )
             
         except Exception as e:
             logger.error("Error handling request", method=request.method, error=str(e))
+            
             return JSONRPCResponse(
+                jsonrpc="2.0",
                 id=request.id,
-                error=JSONRPCError(
-                    code=-32603,
-                    message="Internal error",
-                    data=str(e)
-                )
+                error={
+                    "code": -32603,
+                    "message": "Internal error",
+                    "data": str(e)
+                }
             )
     
     async def broadcast_message(self, message: Dict[str, Any]):
