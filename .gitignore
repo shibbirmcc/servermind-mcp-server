@@ -68,3 +68,7 @@ config.json
 # Temporary files
 *.tmp
 *.temp
+
+# Docker
+.env
+docker-compose.override.yml

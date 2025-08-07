@@ -1,3 +1,289 @@
 """Search tool implementation for MCP."""
 
-# TODO: Implement MCP tool for Splunk search operations
+from typing import Dict, Any, List, Optional
+import structlog
+from mcp.types import Tool, TextContent
+from ..splunk.client import SplunkClient, SplunkSearchError, SplunkConnectionError
+from ..config import get_config
+
+logger = structlog.get_logger(__name__)
+
+
+class SplunkSearchTool:
+    """MCP tool for executing Splunk searches."""
+    
+    def __init__(self):
+        """Initialize the search tool."""
+        self.config = get_config()
+        self._client: Optional[SplunkClient] = None
+    
+    def get_client(self) -> SplunkClient:
+        """Get or create Splunk client instance."""
+        if self._client is None:
+            self._client = SplunkClient(self.config.splunk)
+        return self._client
+    
+    def get_tool_definition(self) -> Tool:
+        """Get the MCP tool definition for splunk_search."""
+        return Tool(
+            name="splunk_search",
+            description="Execute a Splunk search query using SPL (Search Processing Language)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "SPL search query to execute"
+                    },
+                    "earliest_time": {
+                        "type": "string",
+                        "description": "Start time for search (e.g., '-24h', '-1d', '2023-01-01T00:00:00')",
+                        "default": "-24h"
+                    },
+                    "latest_time": {
+                        "type": "string",
+                        "description": "End time for search (e.g., 'now', '2023-01-02T00:00:00')",
+                        "default": "now"
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Maximum number of results to return",
+                        "default": 100,
+                        "minimum": 1,
+                        "maximum": 10000
+                    },
+                    "timeout": {
+                        "type": "integer",
+                        "description": "Search timeout in seconds",
+                        "default": 300,
+                        "minimum": 10,
+                        "maximum": 3600
+                    }
+                },
+                "required": ["query"]
+            }
+        )
+    
+    async def execute(self, arguments: Dict[str, Any]) -> List[TextContent]:
+        """Execute the splunk_search tool.
+        
+        Args:
+            arguments: Tool arguments containing query and search parameters
+            
+        Returns:
+            List[TextContent]: Search results and metadata
+        """
+        try:
+            # Extract arguments
+            query = arguments.get("query")
+            if not query:
+                raise ValueError("Query parameter is required")
+            
+            earliest_time = arguments.get("earliest_time", "-24h")
+            latest_time = arguments.get("latest_time", "now")
+            max_results = arguments.get("max_results", self.config.mcp.max_results_default)
+            timeout = arguments.get("timeout", self.config.mcp.search_timeout)
+            
+            logger.info("Executing Splunk search", 
+                       query=query, 
+                       earliest_time=earliest_time,
+                       latest_time=latest_time,
+                       max_results=max_results)
+            
+            # Get client and execute search
+            client = self.get_client()
+            
+            search_kwargs = {
+                'earliest_time': earliest_time,
+                'latest_time': latest_time,
+                'max_results': max_results,
+                'timeout': timeout
+            }
+            
+            results = client.execute_search(query, **search_kwargs)
+            
+            # Format results for MCP response
+            return self._format_search_results(query, results, search_kwargs)
+            
+        except SplunkConnectionError as e:
+            logger.error("Splunk connection error", error=str(e))
+            return [TextContent(
+                type="text",
+                text=f"❌ **Splunk Connection Error**\n\n"
+                     f"Failed to connect to Splunk: {e}\n\n"
+                     f"Please check your Splunk configuration and ensure the server is accessible."
+            )]
+        
+        except SplunkSearchError as e:
+            logger.error("Splunk search error", error=str(e))
+            return [TextContent(
+                type="text",
+                text=f"❌ **Splunk Search Error**\n\n"
+                     f"Search execution failed: {e}\n\n"
+                     f"Please check your SPL query syntax and try again."
+            )]
+        
+        except ValueError as e:
+            logger.error("Invalid arguments", error=str(e))
+            return [TextContent(
+                type="text",
+                text=f"❌ **Invalid Arguments**\n\n"
+                     f"Error: {e}\n\n"
+                     f"Please provide valid search parameters."
+            )]
+        
+        except Exception as e:
+            logger.error("Unexpected error in search tool", error=str(e))
+            return [TextContent(
+                type="text",
+                text=f"❌ **Unexpected Error**\n\n"
+                     f"An unexpected error occurred: {e}\n\n"
+                     f"Please try again or contact support if the issue persists."
+            )]
+    
+    def _format_search_results(self, query: str, results: List[Dict[str, Any]], 
+                             search_kwargs: Dict[str, Any]) -> List[TextContent]:
+        """Format search results for MCP response.
+        
+        Args:
+            query: Original search query
+            results: Search results from Splunk
+            search_kwargs: Search parameters used
+            
+        Returns:
+            List[TextContent]: Formatted results
+        """
+        result_count = len(results)
+        
+        # Create summary
+        summary = (
+            f"✅ **Splunk Search Completed**\n\n"
+            f"**Query:** `{query}`\n"
+            f"**Time Range:** {search_kwargs['earliest_time']} to {search_kwargs['latest_time']}\n"
+            f"**Results:** {result_count} events\n"
+            f"**Max Results:** {search_kwargs['max_results']}\n\n"
+        )
+        
+        if result_count == 0:
+            return [TextContent(
+                type="text",
+                text=summary + "No results found for the specified search criteria."
+            )]
+        
+        # Format results
+        formatted_results = summary + "**Search Results:**\n\n"
+        
+        for i, result in enumerate(results[:10], 1):  # Show first 10 results in detail
+            formatted_results += f"**Result {i}:**\n"
+            
+            # Show key fields first
+            key_fields = ['_time', '_raw', 'host', 'source', 'sourcetype', 'index']
+            shown_fields = set()
+            
+            for field in key_fields:
+                if field in result:
+                    value = result[field]
+                    if field == '_raw':
+                        # Truncate raw events if too long
+                        if len(str(value)) > 200:
+                            value = str(value)[:200] + "..."
+                    formatted_results += f"  - **{field}:** {value}\n"
+                    shown_fields.add(field)
+            
+            # Show other fields
+            other_fields = {k: v for k, v in result.items() 
+                          if k not in shown_fields and not k.startswith('_')}
+            
+            if other_fields:
+                formatted_results += "  - **Other fields:** "
+                field_strs = [f"{k}={v}" for k, v in list(other_fields.items())[:5]]
+                formatted_results += ", ".join(field_strs)
+                if len(other_fields) > 5:
+                    formatted_results += f" (and {len(other_fields) - 5} more)"
+                formatted_results += "\n"
+            
+            formatted_results += "\n"
+        
+        # Add summary if more results available
+        if result_count > 10:
+            formatted_results += f"... and {result_count - 10} more results.\n\n"
+        
+        # Add analysis suggestions
+        formatted_results += self._generate_analysis_suggestions(query, results)
+        
+        return [TextContent(type="text", text=formatted_results)]
+    
+    def _generate_analysis_suggestions(self, query: str, results: List[Dict[str, Any]]) -> str:
+        """Generate analysis suggestions based on search results.
+        
+        Args:
+            query: Original search query
+            results: Search results
+            
+        Returns:
+            str: Analysis suggestions
+        """
+        if not results:
+            return ""
+        
+        suggestions = "**💡 Analysis Suggestions:**\n\n"
+        
+        # Analyze common fields
+        common_fields = {}
+        for result in results:
+            for field in result.keys():
+                if not field.startswith('_'):
+                    common_fields[field] = common_fields.get(field, 0) + 1
+        
+        # Suggest field analysis
+        if common_fields:
+            top_fields = sorted(common_fields.items(), key=lambda x: x[1], reverse=True)[:3]
+            field_names = [field for field, _ in top_fields]
+            suggestions += f"- **Field Analysis:** Consider analyzing fields: {', '.join(field_names)}\n"
+            suggestions += f"  Example: `{query} | stats count by {field_names[0]}`\n\n"
+        
+        # Suggest time-based analysis
+        if any('_time' in result for result in results):
+            suggestions += f"- **Time Analysis:** Analyze patterns over time\n"
+            suggestions += f"  Example: `{query} | timechart count`\n\n"
+        
+        # Suggest error analysis if query contains error-related terms
+        error_terms = ['error', 'fail', 'exception', 'warning', 'critical']
+        if any(term in query.lower() for term in error_terms):
+            suggestions += f"- **Error Analysis:** Investigate error patterns\n"
+            suggestions += f"  Example: `{query} | stats count by host, source`\n\n"
+        
+        # Suggest top values analysis
+        suggestions += f"- **Top Values:** Find most common occurrences\n"
+        suggestions += f"  Example: `{query} | top limit=10 host`\n\n"
+        
+        return suggestions
+    
+    def cleanup(self):
+        """Clean up resources."""
+        if self._client is not None:
+            try:
+                self._client.disconnect()
+            except Exception as e:
+                logger.warning("Error during client cleanup", error=str(e))
+            finally:
+                self._client = None
+
+
+# Global search tool instance
+_search_tool = SplunkSearchTool()
+
+
+def get_search_tool() -> SplunkSearchTool:
+    """Get the global search tool instance."""
+    return _search_tool
+
+
+def get_tool_definition() -> Tool:
+    """Get the MCP tool definition for splunk_search."""
+    return _search_tool.get_tool_definition()
+
+
+async def execute_search(arguments: Dict[str, Any]) -> List[TextContent]:
+    """Execute the splunk_search tool."""
+    return await _search_tool.execute(arguments)

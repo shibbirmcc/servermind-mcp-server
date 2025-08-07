@@ -53,7 +53,7 @@ Issues = "https://github.com/shibbirmcc/splunk-mcp-server/issues"
 Documentation = "https://github.com/shibbirmcc/splunk-mcp-server/wiki"
 
 [project.scripts]
-splunk-mcp-server = "src.server:main"
+splunk-mcp-server = "src.server:sync_main"
 
 [tool.setuptools.packages.find]
 where = ["."]
