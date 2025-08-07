@@ -2,7 +2,13 @@
 
 A Model Context Protocol (MCP) server that provides seamless integration with Splunk for log access, search, and analysis capabilities. This server enables AI assistants and other MCP clients to interact with Splunk instances, execute searches, and analyze log data.
 
+## Overview
+
+A Model Context Protocol (MCP) server that provides seamless integration with Splunk for log access, search, and analysis capabilities. This server enables AI assistants and other MCP clients to interact with Splunk instances, execute searches, and analyze log data.
+
 ## Features
+
+### Current Capabilities
 
 - **Splunk Search Integration**: Execute SPL (Search Processing Language) queries directly from MCP clients
 - **Intelligent Query Validation**: Built-in SPL query validation and safety checks
@@ -12,13 +18,29 @@ A Model Context Protocol (MCP) server that provides seamless integration with Sp
 - **Comprehensive Error Handling**: Detailed error messages and troubleshooting guidance
 - **Flexible Configuration**: Support for JSON files and environment variables
 
+### Planned Features
+
+- **Advanced Analytics**: Enhanced statistical analysis and machine learning integration
+- **Real-time Monitoring**: Live dashboard and alerting capabilities
+- **Multi-tenant Support**: Support for multiple Splunk instances
+- **Enhanced Security**: Advanced authentication and authorization features
+
 ## Installation
 
 ### Prerequisites
 
-- Python 3.8 or higher
+- Python 3.8+ or higher
 - Access to a Splunk instance
 - Splunk credentials with search permissions
+
+### Setup
+
+Follow these steps to set up the Splunk MCP Server:
+
+1. Clone the repository
+2. Install dependencies
+3. Configure your Splunk connection
+4. Run the server
 
 ### Install Dependencies
 
@@ -96,6 +118,10 @@ export SPLUNK_TIMEOUT=30
 | `search_timeout` | 300 | Default search timeout in seconds |
 
 ## Usage
+
+### Available Tools
+
+The following tools are available through the MCP server.
 
 ### Docker Deployment (Recommended)
 
@@ -183,7 +209,7 @@ To use the Dockerized MCP server with Cline, configure it to run the container:
         "run", 
         "--rm", 
         "-i",
-        "--env-file", "/path/to/splunk-mcp-server/.env",
+        "--env-file", "/path/to/shibbirmcc/servermind-mcp-server/.env",
         "splunk-mcp-server"
       ]
     }
@@ -199,10 +225,10 @@ Or using docker-compose:
     "splunk": {
       "command": "docker-compose",
       "args": [
-        "-f", "/path/to/splunk-mcp-server/docker-compose.yml",
+        "-f", "/path/to/shibbirmcc/servermind-mcp-server/docker-compose.yml",
         "run", "--rm", "splunk-mcp-server"
       ],
-      "cwd": "/path/to/splunk-mcp-server"
+      "cwd": "/path/to/shibbirmcc/servermind-mcp-server"
     }
   }
 }
@@ -215,7 +241,7 @@ Or using docker-compose:
   "mcpServers": {
     "splunk": {
       "command": "python",
-      "args": ["/path/to/splunk-mcp-server/src/server.py"]
+      "args": ["/path/to/shibbirmcc/servermind-mcp-server/src/server.py"]
     }
   }
 }
@@ -311,6 +337,16 @@ The server provides detailed error messages for common issues:
 - **Search Errors**: SPL syntax errors or search failures
 - **Timeout Errors**: Long-running searches that exceed limits
 
+## Security Considerations
+
+When deploying the Splunk MCP Server, consider the following security aspects:
+
+- **Credential Management**: Store Splunk credentials securely using environment variables or encrypted configuration files
+- **Network Security**: Use HTTPS connections to Splunk and consider network segmentation
+- **Access Control**: Ensure the MCP server runs with minimal required permissions
+- **Query Validation**: The server includes built-in query validation to prevent dangerous operations
+- **SSL/TLS**: Always use SSL/TLS for Splunk connections in production environments
+
 ## Development
 
 ### Running Tests
@@ -342,7 +378,7 @@ mypy src/
 ### Project Structure
 
 ```
-splunk-mcp-server/
+shibbirmcc/splunk-mcp-server/
 ├── src/
 │   ├── __init__.py
 │   ├── server.py              # Main MCP server
@@ -425,7 +461,7 @@ For issues and questions:
 
 ## Changelog
 
-### Version 1.0.0
+### v1.0.0
 - Initial release
 - Basic Splunk search functionality
 - Configuration management

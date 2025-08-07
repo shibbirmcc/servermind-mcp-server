@@ -26,6 +26,9 @@ classifiers = [
 requires-python = ">=3.8"
 dependencies = [
     "mcp>=1.0.0",
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "sse-starlette>=1.6.0",
     "splunk-sdk>=2.0.0",
     "requests>=2.31.0",
     "urllib3>=2.0.0",

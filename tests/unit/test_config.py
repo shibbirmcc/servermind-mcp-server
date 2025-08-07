@@ -89,7 +89,7 @@ class TestConfigLoader:
         
         try:
             loader = ConfigLoader(temp_path)
-            with pytest.raises(ValueError, match="Missing required Splunk configuration fields"):
+            with pytest.raises(ValueError, match="Must provide either SPLUNK_TOKEN or both SPLUNK_USERNAME and SPLUNK_PASSWORD"):
                 loader.load()
                 
         finally:
