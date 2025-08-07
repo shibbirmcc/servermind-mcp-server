@@ -40,7 +40,7 @@ ENV MCP_SEARCH_TIMEOUT=300
 ENV LOG_LEVEL=INFO
 
 # Expose port for SSE transport
-EXPOSE 8000
+EXPOSE 9090
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

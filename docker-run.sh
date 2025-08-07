@@ -1,9 +1,13 @@
 #!/bin/bash
 
 # Docker deployment script for Splunk MCP Server
-# This script builds and runs the MCP server in a Docker container
+# This script builds and runs the MCP server in a Docker container using direct Docker commands
 
 set -e
+
+# Configuration
+IMAGE_NAME="splunk-mcp-server"
+CONTAINER_NAME="splunk-mcp-server"
 
 # Colors for output
 RED='\033[0;31m'
@@ -35,19 +39,13 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-# Check if Docker Compose is installed
-if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
-    print_error "Docker Compose is not installed. Please install Docker Compose first."
-    exit 1
-fi
-
 # Check if .env file exists
 if [ ! -f .env ]; then
     print_warning ".env file not found. Creating from .env.example..."
     if [ -f .env.example ]; then
         cp .env.example .env
         print_warning "Please edit .env file with your Splunk credentials before running the container."
-        print_warning "Required variables: SPLUNK_HOST, SPLUNK_USERNAME, SPLUNK_PASSWORD"
+        print_warning "Required variables: SPLUNK_HOST, SPLUNK_TOKEN"
         exit 1
     else
         print_error ".env.example file not found. Cannot create .env file."
@@ -64,75 +62,123 @@ if [ -z "$SPLUNK_HOST" ] || [ "$SPLUNK_HOST" = "your-splunk-host.com" ]; then
     exit 1
 fi
 
-if [ -z "$SPLUNK_USERNAME" ] || [ "$SPLUNK_USERNAME" = "admin" ]; then
-    print_warning "SPLUNK_USERNAME is not set or using default 'admin'. Please verify this is correct."
-fi
-
-if [ -z "$SPLUNK_PASSWORD" ] || [ "$SPLUNK_PASSWORD" = "changeme" ]; then
-    print_error "SPLUNK_PASSWORD is not set or still has default value. Please update .env file."
+if [ -z "$SPLUNK_TOKEN" ] || [ "$SPLUNK_TOKEN" = "your-token-here" ]; then
+    print_error "SPLUNK_TOKEN is not set or still has default value. Please update .env file."
     exit 1
 fi
 
 print_success "Environment variables validated."
 
+# Build Docker image
+build_image() {
+    print_status "Building Docker image: $IMAGE_NAME"
+    docker build -t "$IMAGE_NAME" .
+    print_success "Docker image built successfully."
+}
+
+# Stop and remove existing container
+cleanup_container() {
+    if docker ps -a --format 'table {{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+        print_status "Stopping and removing existing container..."
+        docker stop "$CONTAINER_NAME" >/dev/null 2>&1 || true
+        docker rm "$CONTAINER_NAME" >/dev/null 2>&1 || true
+    fi
+}
+
+# Run container
+run_container() {
+    print_status "Starting Splunk MCP Server container..."
+    
+    docker run -d \
+        --name "$CONTAINER_NAME" \
+        --network host \
+        -p 9090:9090 \
+        --env-file .env \
+        "$IMAGE_NAME"
+    
+    # Check if container started successfully
+    sleep 2
+    if docker ps --format 'table {{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+        print_success "Splunk MCP Server started successfully!"
+        echo ""
+        echo "Container Details:"
+        echo "  Name: $CONTAINER_NAME"
+        echo "  Image: $IMAGE_NAME"
+        echo "  Status: Running"
+        echo "  SSE Transport: http://localhost:9090"
+        echo ""
+        print_status "Container logs:"
+        docker logs -f "$CONTAINER_NAME"
+    else
+        print_error "Failed to start container"
+        echo "Check the logs with: docker logs $CONTAINER_NAME"
+        exit 1
+    fi
+}
+
 # Parse command line arguments
 COMMAND=${1:-"run"}
-PROFILE=${2:-""}
 
 case $COMMAND in
     "build")
-        print_status "Building Docker image..."
-        docker-compose build
-        print_success "Docker image built successfully."
+        build_image
         ;;
     
     "run")
-        print_status "Starting Splunk MCP Server..."
-        docker-compose up -d
-        print_success "Splunk MCP Server started."
-        print_status "Container logs:"
-        docker-compose logs -f
+        cleanup_container
+        build_image
+        run_container
         ;;
     
     "test")
-        print_status "Running tests..."
-        docker-compose --profile test up --build splunk-mcp-test
+        print_status "Running tests in container..."
+        cleanup_container
+        build_image
+        docker run --rm \
+            --network host \
+            --env-file .env \
+            "$IMAGE_NAME" \
+            python -m pytest tests/ -v
         ;;
     
     "stop")
         print_status "Stopping Splunk MCP Server..."
-        docker-compose down
+        docker stop "$CONTAINER_NAME" 2>/dev/null || print_warning "Container not running"
+        docker rm "$CONTAINER_NAME" 2>/dev/null || print_warning "Container not found"
         print_success "Splunk MCP Server stopped."
         ;;
     
     "restart")
         print_status "Restarting Splunk MCP Server..."
-        docker-compose down
-        docker-compose up -d
-        print_success "Splunk MCP Server restarted."
+        cleanup_container
+        build_image
+        run_container
         ;;
     
     "logs")
         print_status "Showing container logs..."
-        docker-compose logs -f
+        docker logs -f "$CONTAINER_NAME"
         ;;
     
     "shell")
         print_status "Opening shell in container..."
-        docker-compose exec splunk-mcp-server /bin/bash
+        docker exec -it "$CONTAINER_NAME" /bin/bash
         ;;
     
     "clean")
         print_status "Cleaning up Docker resources..."
-        docker-compose down -v --remove-orphans
+        docker stop "$CONTAINER_NAME" 2>/dev/null || true
+        docker rm "$CONTAINER_NAME" 2>/dev/null || true
+        docker rmi "$IMAGE_NAME" 2>/dev/null || true
         docker system prune -f
         print_success "Docker resources cleaned up."
         ;;
     
     "health")
         print_status "Checking container health..."
-        docker-compose ps
-        docker-compose exec splunk-mcp-server python -c "
+        docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep -E "(NAMES|$CONTAINER_NAME)" || echo "Container not found"
+        if docker ps --format 'table {{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+            docker exec "$CONTAINER_NAME" python -c "
 import sys
 sys.path.insert(0, 'src')
 from src.config import get_config
@@ -142,10 +188,14 @@ try:
     print(f'✓ Splunk host: {config.splunk.host}')
     print(f'✓ Splunk port: {config.splunk.port}')
     print(f'✓ MCP server: {config.mcp.server_name}')
+    print('✓ SSE transport: http://localhost:9090')
 except Exception as e:
     print(f'✗ Health check failed: {e}')
     sys.exit(1)
 "
+        else
+            print_warning "Container is not running"
+        fi
         ;;
     
     *)
@@ -166,6 +216,8 @@ except Exception as e:
         echo "  $0 run          # Start the server"
         echo "  $0 test         # Run tests"
         echo "  $0 logs         # View logs"
+        echo ""
+        echo "SSE Transport will be available at: http://localhost:9090"
         exit 1
         ;;
 esac

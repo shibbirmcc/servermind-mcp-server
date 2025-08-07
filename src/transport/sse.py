@@ -22,7 +22,7 @@ logger = structlog.get_logger(__name__)
 class SSETransport:
     """Server-Sent Events transport for MCP."""
     
-    def __init__(self, server: Server, host: str = "127.0.0.1", port: int = 8000):
+    def __init__(self, server: Server, host: str = "127.0.0.1", port: int = 9090):
         """Initialize SSE transport.
         
         Args:

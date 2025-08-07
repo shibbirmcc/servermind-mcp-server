@@ -124,6 +124,7 @@ run_persistent_container() {
     docker run -d \
         --name "$CONTAINER_NAME" \
         --network host \
+        -p 9090:9090 \
         $ENV_ARGS \
         "$IMAGE_NAME" \
         tail -f /dev/null

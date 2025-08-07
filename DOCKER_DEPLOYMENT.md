@@ -89,22 +89,6 @@ The `docker-run.sh` script provides convenient commands:
 ./docker-run.sh clean
 ```
 
-### Using Docker Compose Directly
-
-```bash
-# Build and start
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop
-docker-compose down
-
-# Run tests
-docker-compose --profile test up --build splunk-mcp-test
-```
-
 ### Using Docker Directly
 
 ```bash
@@ -132,7 +116,7 @@ Traditional stdin/stdout communication for direct MCP client integration.
 ### 2. SSE Transport (Server-Sent Events)
 HTTP-based transport using Server-Sent Events for web-based clients and environments that require HTTP communication.
 
-When using SSE transport, the server exposes port 8000 for HTTP connections.
+When using SSE transport, the server exposes port 9090 for HTTP connections.
 
 ## Cline Integration
 
@@ -169,7 +153,7 @@ For HTTP-based communication using Server-Sent Events:
     "splunk": {
       "transport": {
         "type": "sse",
-        "url": "http://127.0.0.1:8000"
+        "url": "http://127.0.0.1:9090"
       }
     }
   }
@@ -178,33 +162,16 @@ For HTTP-based communication using Server-Sent Events:
 
 First, start the container (uses host networking for Splunk connectivity):
 ```bash
-# Using docker-compose (SSE transport available on host port 8000)
+# Start the container with SSE transport
 ./docker-run.sh run
 
-# Or using docker directly with host networking
-docker run -d --network host --env-file .env splunk-mcp-server
+# Or using docker directly with host networking and port mapping
+docker run -d --network host -p 9090:9090 --env-file .env splunk-mcp-server
 ```
 
-Note: The container uses host networking to ensure connectivity to external Splunk servers. The SSE transport will be available on localhost:8000.
+Note: The container uses host networking to ensure connectivity to external Splunk servers. The SSE transport will be available on localhost:9090.
 
-#### Option 3: Using Docker Compose
-
-```json
-{
-  "mcpServers": {
-    "splunk": {
-      "command": "docker-compose",
-      "args": [
-        "-f", "/absolute/path/to/splunk-mcp-server/docker-compose.yml",
-        "run", "--rm", "splunk-mcp-server"
-      ],
-      "cwd": "/absolute/path/to/splunk-mcp-server"
-    }
-  }
-}
-```
-
-#### Option 4: Using the Deployment Script
+#### Option 3: Using the Deployment Script
 
 ```json
 {
@@ -305,17 +272,18 @@ docker ps
 
 ### Resource Tuning
 
-Adjust resource limits in `docker-compose.yml`:
+For production deployments, you can adjust resource limits using Docker run parameters:
 
-```yaml
-deploy:
-  resources:
-    limits:
-      memory: 1G        # Increase for large result sets
-      cpus: '1.0'       # Increase for complex queries
-    reservations:
-      memory: 512M
-      cpus: '0.5'
+```bash
+# Run with resource limits
+docker run -d \
+  --name splunk-mcp-server \
+  --network host \
+  -p 9090:9090 \
+  --memory=1g \
+  --cpus=1.0 \
+  --env-file .env \
+  splunk-mcp-server
 ```
 
 ### Query Optimization
