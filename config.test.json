@@ -1,0 +1,18 @@
+{
+  "splunk": {
+    "host": "localhost",
+    "port": 8089,
+    "username": "admin",
+    "password": "changeme",
+    "scheme": "https",
+    "version": "8.0",
+    "verify_ssl": false,
+    "timeout": 30
+  },
+  "mcp": {
+    "server_name": "splunk-mcp-server-test",
+    "version": "1.0.0",
+    "max_results_default": 50,
+    "search_timeout": 120
+  }
+}
