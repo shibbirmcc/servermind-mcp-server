@@ -18,6 +18,7 @@ from starlette.routing import Mount, Route
 from mcp.types import TextContent
 
 from src.tools.search import get_search_tool
+from src.tools.indexes import get_indexes_tool
 
 # Create FastMCP instance
 mcp = FastMCP("splunk-mcp-server")
@@ -53,6 +54,27 @@ async def splunk_search(
             
     except Exception as e:
         return f"Error executing search: {str(e)}"
+
+@mcp.tool()
+async def splunk_indexes(
+    context: Context = None
+) -> str:
+    """List available Splunk indexes with their metadata"""
+    try:
+        # Get the indexes tool and execute
+        indexes_tool = get_indexes_tool()
+        arguments = {}
+        
+        results = await indexes_tool.execute(arguments)
+        
+        # Convert TextContent results to string
+        if results and len(results) > 0:
+            return results[0].text
+        else:
+            return "No indexes found"
+            
+    except Exception as e:
+        return f"Error retrieving indexes: {str(e)}"
 
 def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlette:
     sse = SseServerTransport("/messages")
@@ -100,6 +122,7 @@ def main():
     print(f"  Messages: http://localhost:{port}/messages/")
     print("Tools:")
     print(f"  - splunk_search: Execute Splunk search queries")
+    print(f"  - splunk_indexes: List available Splunk indexes")
     
     uvicorn.run(starlette_app, host="0.0.0.0", port=port)
 
