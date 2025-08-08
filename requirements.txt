@@ -1,10 +1,14 @@
 # MCP SDK
 mcp>=1.0.0
 
+# FastMCP
+fastmcp>=0.1.0
+
 # SSE Transport
 fastapi>=0.104.0
 uvicorn>=0.24.0
 sse-starlette>=1.6.0
+starlette>=0.27.0
 
 # Splunk SDK
 splunk-sdk>=2.0.0
