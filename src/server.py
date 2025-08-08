@@ -16,7 +16,7 @@ from starlette.requests import Request
 from starlette.routing import Mount, Route
 from mcp.types import TextContent
 
-from .tools.search import get_search_tool
+from src.tools.search import get_search_tool
 
 # Create FastMCP instance
 mcp = FastMCP("splunk-mcp-server")
