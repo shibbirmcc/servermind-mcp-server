@@ -13,17 +13,8 @@ from mcp.types import Tool, Resource, TextContent
 
 from src.transport.sse import SSETransport
 
-# Mock the config before importing server
-with patch('src.config.get_config') as mock_get_config:
-    mock_config = MagicMock()
-    mock_config.splunk.host = "localhost"
-    mock_config.splunk.port = 8089
-    mock_config.splunk.scheme = "https"
-    mock_config.mcp.max_results_default = 100
-    mock_config.mcp.search_timeout = 300
-    mock_get_config.return_value = mock_config
-    
-    from src.server import SplunkMCPServer
+# Import server components
+from src.server import mcp, create_starlette_app
 
 
 class TestSSETransport:
@@ -150,33 +141,17 @@ class TestSSETransport:
 
 
 class TestSplunkMCPServerIntegration:
-    """Integration tests for Splunk MCP Server with SSE transport."""
+    """Integration tests for Splunk MCP Server with FastMCP."""
     
-    @patch('src.server.get_config')
-    @patch('src.splunk.client.SplunkClient')
-    def test_server_startup_with_sse(self, mock_client_class, mock_get_config):
-        """Test server startup with SSE transport."""
-        # Mock configuration
-        mock_config = MagicMock()
-        mock_config.mcp.server_name = "test-server"
-        mock_config.mcp.version = "1.0.0"
-        mock_config.splunk.host = "localhost"
-        mock_get_config.return_value = mock_config
+    def test_fastmcp_server_initialization(self):
+        """Test FastMCP server initialization."""
+        # Test that the FastMCP instance is properly initialized
+        assert mcp.name == "splunk-mcp-server"
+        assert mcp._mcp_server is not None
         
-        # Mock Splunk client
-        mock_client = MagicMock()
-        mock_client.test_connection.return_value = {
-            "version": "8.2.0",
-            "server_name": "test-splunk"
-        }
-        mock_client_class.return_value = mock_client
-        
-        # Create server instance
-        server = SplunkMCPServer()
-        
-        # Verify server is initialized correctly
-        assert server.server.name == "splunk-mcp-server"
-        assert server.config is None  # Not loaded until run()
+        # Test that we can create a Starlette app
+        starlette_app = create_starlette_app(mcp._mcp_server, debug=True)
+        assert starlette_app is not None
     
     def test_sse_transport_integration(self):
         """Test SSE transport integration with real server handlers."""
