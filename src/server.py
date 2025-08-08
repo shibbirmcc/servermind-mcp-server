@@ -13,6 +13,7 @@ from mcp.server import Server
 from starlette.applications import Starlette
 from mcp.server.sse import SseServerTransport
 from starlette.requests import Request
+from starlette.responses import Response
 from starlette.routing import Mount, Route
 from mcp.types import TextContent
 
@@ -63,9 +64,18 @@ def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlett
             await mcp_server.run(
                 streams[0], streams[1], mcp_server.create_initialization_options()
             )
+        # Return empty response to avoid NoneType error
+        return Response()
     
     async def handle_root(request):
-        return await handle_sse(request)
+        async with sse.connect_sse(
+            request.scope, request.receive, request._send
+        ) as streams:
+            await mcp_server.run(
+                streams[0], streams[1], mcp_server.create_initialization_options()
+            )
+        # Return empty response to avoid NoneType error
+        return Response()
     
     return Starlette(
         debug=debug,
