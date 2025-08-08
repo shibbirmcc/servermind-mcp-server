@@ -60,7 +60,6 @@ coverage.xml
 logs/
 
 # Configuration
-config.json
 .env
 .env.local
 .env.*.local

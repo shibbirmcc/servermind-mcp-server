@@ -50,28 +50,17 @@ class SplunkClient:
         logger.info("Connecting to Splunk", host=self.config.host, port=self.config.port)
         
         try:
-            # Create service connection - use token if available, otherwise username/password
-            if self.config.token:
-                self._service = client.connect(
-                    host=self.config.host,
-                    port=self.config.port,
-                    token=self.config.token,
-                    scheme=self.config.scheme,
-                    verify=self.config.verify_ssl,
-                    timeout=self.config.timeout,
-                    autologin=True
-                )
-            else:
-                self._service = client.connect(
-                    host=self.config.host,
-                    port=self.config.port,
-                    username=self.config.username,
-                    password=self.config.password,
-                    scheme=self.config.scheme,
-                    verify=self.config.verify_ssl,
-                    timeout=self.config.timeout,
-                    autologin=True
-                )
+            # Create service connection using username/password authentication
+            self._service = client.connect(
+                host=self.config.host,
+                port=self.config.port,
+                username=self.config.username,
+                password=self.config.password,
+                scheme=self.config.scheme,
+                verify=self.config.verify_ssl,
+                timeout=self.config.timeout,
+                autologin=True
+            )
             
             # Test connection by getting server info
             info = self._service.info

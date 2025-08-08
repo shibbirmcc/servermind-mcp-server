@@ -1,11 +1,10 @@
 """Configuration management for Splunk MCP Server."""
 
-import json
 import os
-from typing import Dict, Any, Optional
+from typing import Optional
 from dataclasses import dataclass
-from pathlib import Path
 import structlog
+from dotenv import load_dotenv
 
 logger = structlog.get_logger(__name__)
 
@@ -17,7 +16,6 @@ class SplunkConfig:
     port: int
     username: str = ""
     password: str = ""
-    token: str = ""
     scheme: str = "https"
     version: str = "8.0"
     verify_ssl: bool = True
@@ -41,146 +39,107 @@ class Config:
 
 
 class ConfigLoader:
-    """Configuration loader with support for JSON files and environment variables."""
+    """Configuration loader using environment variables only."""
     
-    def __init__(self, config_path: Optional[str] = None):
-        """Initialize configuration loader.
-        
-        Args:
-            config_path: Path to configuration file. If None, looks for config.json
-        """
-        self.config_path = config_path or "config.json"
+    def __init__(self):
+        """Initialize configuration loader."""
         self._config: Optional[Config] = None
+        # Load .env file if it exists
+        load_dotenv()
     
     def load(self) -> Config:
-        """Load configuration from file and environment variables.
+        """Load configuration from environment variables.
         
         Returns:
             Config: Loaded configuration
             
         Raises:
-            FileNotFoundError: If config file is not found
-            ValueError: If configuration is invalid
+            ValueError: If required configuration is missing or invalid
         """
         if self._config is not None:
             return self._config
         
-        logger.info("Loading configuration", config_path=self.config_path)
+        logger.info("Loading configuration from environment variables")
         
-        # Load from JSON file
-        config_data = self._load_from_file()
-        
-        # Override with environment variables
-        config_data = self._override_with_env(config_data)
-        
-        # Validate and create config objects
-        self._config = self._create_config(config_data)
+        # Load configuration from environment variables
+        self._config = self._create_config_from_env()
         
         logger.info("Configuration loaded successfully")
         return self._config
     
-    def _load_from_file(self) -> Dict[str, Any]:
-        """Load configuration from JSON file."""
-        config_path = Path(self.config_path)
-        
-        if not config_path.exists():
-            logger.warning("Config file not found, using environment variables only", 
-                         path=str(config_path))
-            return {"splunk": {}, "mcp": {}}
-        
-        try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config_data = json.load(f)
-            logger.debug("Configuration loaded from file", path=str(config_path))
-            return config_data
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON in config file {config_path}: {e}")
-        except Exception as e:
-            raise ValueError(f"Error reading config file {config_path}: {e}")
-    
-    def _override_with_env(self, config_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Override configuration with environment variables."""
-        env_mappings = {
-            'SPLUNK_HOST': ('splunk', 'host'),
-            'SPLUNK_PORT': ('splunk', 'port'),
-            'SPLUNK_USERNAME': ('splunk', 'username'),
-            'SPLUNK_PASSWORD': ('splunk', 'password'),
-            'SPLUNK_TOKEN': ('splunk', 'token'),
-            'SPLUNK_SCHEME': ('splunk', 'scheme'),
-            'SPLUNK_VERSION': ('splunk', 'version'),
-            'SPLUNK_VERIFY_SSL': ('splunk', 'verify_ssl'),
-            'SPLUNK_TIMEOUT': ('splunk', 'timeout'),
-            'MCP_SERVER_NAME': ('mcp', 'server_name'),
-            'MCP_VERSION': ('mcp', 'version'),
-            'MCP_MAX_RESULTS_DEFAULT': ('mcp', 'max_results_default'),
-            'MCP_SEARCH_TIMEOUT': ('mcp', 'search_timeout'),
-        }
-        
-        for env_var, (section, key) in env_mappings.items():
-            value = os.getenv(env_var)
-            if value is not None:
-                if section not in config_data:
-                    config_data[section] = {}
-                
-                # Convert types for specific fields
-                if key in ['port', 'timeout', 'max_results_default', 'search_timeout']:
-                    try:
-                        value = int(value)
-                    except ValueError:
-                        logger.warning("Invalid integer value for environment variable", 
-                                     env_var=env_var, value=value)
-                        continue
-                elif key == 'verify_ssl':
-                    value = value.lower() in ('true', '1', 'yes', 'on')
-                
-                config_data[section][key] = value
-                logger.debug("Configuration overridden from environment", 
-                           env_var=env_var, section=section, key=key)
-        
-        return config_data
-    
-    def _create_config(self, config_data: Dict[str, Any]) -> Config:
-        """Create configuration objects from loaded data."""
-        splunk_data = config_data.get('splunk', {})
-        mcp_data = config_data.get('mcp', {})
-        
-        # Validate required Splunk fields - either token OR username/password
-        host = splunk_data.get('host')
-        token = splunk_data.get('token')
-        username = splunk_data.get('username')
-        password = splunk_data.get('password')
+    def _create_config_from_env(self) -> Config:
+        """Create configuration objects from environment variables."""
+        # Get required Splunk configuration
+        host = os.getenv('SPLUNK_HOST')
+        username = os.getenv('SPLUNK_USERNAME')
+        password = os.getenv('SPLUNK_PASSWORD')
         
         if not host:
-            raise ValueError("Missing required Splunk configuration field: host")
+            raise ValueError("Missing required environment variable: SPLUNK_HOST")
         
-        if not token and not (username and password):
-            raise ValueError("Must provide either SPLUNK_TOKEN or both SPLUNK_USERNAME and SPLUNK_PASSWORD")
+        if not (username and password):
+            raise ValueError("Must provide both SPLUNK_USERNAME and SPLUNK_PASSWORD environment variables")
+        
+        # Get optional Splunk configuration with defaults
+        port = self._get_int_env('SPLUNK_PORT', 8089)
+        scheme = os.getenv('SPLUNK_SCHEME', 'https')
+        version = os.getenv('SPLUNK_VERSION', '8.0')
+        verify_ssl = self._get_bool_env('SPLUNK_VERIFY_SSL', True)
+        timeout = self._get_int_env('SPLUNK_TIMEOUT', 30)
         
         # Create Splunk config
         splunk_config = SplunkConfig(
             host=host,
-            port=splunk_data.get('port', 8089),
-            username=username or "",
-            password=password or "",
-            token=token or "",
-            scheme=splunk_data.get('scheme', 'https'),
-            version=splunk_data.get('version', '8.0'),
-            verify_ssl=splunk_data.get('verify_ssl', True),
-            timeout=splunk_data.get('timeout', 30)
+            port=port,
+            username=username,
+            password=password,
+            scheme=scheme,
+            version=version,
+            verify_ssl=verify_ssl,
+            timeout=timeout
         )
+        
+        # Get MCP configuration with defaults
+        server_name = os.getenv('MCP_SERVER_NAME', 'splunk-mcp-server')
+        mcp_version = os.getenv('MCP_VERSION', '1.0.0')
+        max_results_default = self._get_int_env('MCP_MAX_RESULTS_DEFAULT', 100)
+        search_timeout = self._get_int_env('MCP_SEARCH_TIMEOUT', 300)
         
         # Create MCP config
         mcp_config = MCPConfig(
-            server_name=mcp_data.get('server_name', 'splunk-mcp-server'),
-            version=mcp_data.get('version', '1.0.0'),
-            max_results_default=mcp_data.get('max_results_default', 100),
-            search_timeout=mcp_data.get('search_timeout', 300)
+            server_name=server_name,
+            version=mcp_version,
+            max_results_default=max_results_default,
+            search_timeout=search_timeout
         )
         
         return Config(splunk=splunk_config, mcp=mcp_config)
     
+    def _get_int_env(self, env_var: str, default: int) -> int:
+        """Get integer value from environment variable with default."""
+        value = os.getenv(env_var)
+        if value is None:
+            return default
+        
+        try:
+            return int(value)
+        except ValueError:
+            logger.warning("Invalid integer value for environment variable, using default", 
+                         env_var=env_var, value=value, default=default)
+            return default
+    
+    def _get_bool_env(self, env_var: str, default: bool) -> bool:
+        """Get boolean value from environment variable with default."""
+        value = os.getenv(env_var)
+        if value is None:
+            return default
+        
+        return value.lower() in ('true', '1', 'yes', 'on')
+    
     def reload(self) -> Config:
-        """Reload configuration from file and environment."""
+        """Reload configuration from environment variables."""
+        # Reload .env file
+        load_dotenv(override=True)
         self._config = None
         return self.load()
 
