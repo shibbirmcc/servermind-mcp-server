@@ -1,18 +1,10 @@
 {
   "mcpServers": {
     "splunk-mcp-server": {
-      "url": "http://127.0.0.1:9090",
-      "env": {
-        "SPLUNK_HOST": "127.0.0.1",
-        "SPLUNK_USERNAME": "admin",
-        "SPLUNK_PASSWORD": "changeme123",
-        "SPLUNK_PORT": "8089",
-        "SPLUNK_SCHEME": "https",
-        "SPLUNK_VERIFY_SSL": "false",
-        "SPLUNK_TIMEOUT": "30",
-        "LOG_LEVEL": "INFO"
-      },
-      "disabled": false
+      "disabled": false,
+      "timeout": 60,
+      "type": "sse",
+      "url": "http://127.0.0.1:8756/"
     }
   }
 }

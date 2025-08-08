@@ -16,7 +16,7 @@ A Model Context Protocol (MCP) server that provides seamless integration with Sp
 - **Rich Result Formatting**: Well-formatted search results with analysis suggestions
 - **Resource Access**: Access Splunk connection info and index metadata
 - **Comprehensive Error Handling**: Detailed error messages and troubleshooting guidance
-- **Flexible Configuration**: Support for JSON files and environment variables
+- **Flexible Configuration**: Environment variable-based configuration
 
 ### Planned Features
 
@@ -56,33 +56,37 @@ pip install -e .
 
 ## Configuration
 
-### Option 1: Configuration File
+The server uses environment variables for configuration. You can set these directly or use a `.env` file.
 
-Create a `config.json` file in the project root:
+### Using .env File (Recommended)
 
-```json
-{
-  "splunk": {
-    "host": "your-splunk-host.com",
-    "port": 8089,
-    "username": "your-username",
-    "password": "your-password",
-    "scheme": "https",
-    "verify_ssl": true,
-    "timeout": 30
-  },
-  "mcp": {
-    "server_name": "splunk-mcp-server",
-    "version": "1.0.0",
-    "max_results_default": 100,
-    "search_timeout": 300
-  }
-}
+1. Copy the example environment file:
+```bash
+cp .env.example .env
 ```
 
-### Option 2: Environment Variables
+2. Edit the `.env` file with your Splunk credentials:
+```bash
+# Splunk Connection Configuration
+SPLUNK_HOST=your-splunk-host.com
+SPLUNK_PORT=8089
+SPLUNK_USERNAME=your-username
+SPLUNK_PASSWORD=your-password
+SPLUNK_SCHEME=https
+SPLUNK_VERIFY_SSL=true
+SPLUNK_TIMEOUT=30
 
-Set the following environment variables:
+# MCP Server Configuration
+MCP_SERVER_NAME=splunk-mcp-server
+MCP_VERSION=1.0.0
+MCP_MAX_RESULTS_DEFAULT=100
+MCP_SEARCH_TIMEOUT=300
+LOG_LEVEL=INFO
+```
+
+### Using Environment Variables Directly
+
+Alternatively, set the environment variables directly:
 
 ```bash
 export SPLUNK_HOST=your-splunk-host.com
@@ -92,6 +96,11 @@ export SPLUNK_PASSWORD=your-password
 export SPLUNK_SCHEME=https
 export SPLUNK_VERIFY_SSL=true
 export SPLUNK_TIMEOUT=30
+export MCP_SERVER_NAME=splunk-mcp-server
+export MCP_VERSION=1.0.0
+export MCP_MAX_RESULTS_DEFAULT=100
+export MCP_SEARCH_TIMEOUT=300
+export LOG_LEVEL=INFO
 ```
 
 ### Configuration Options
@@ -397,8 +406,7 @@ shibbirmcc/splunk-mcp-server/
 │   ├── unit/                  # Unit tests
 │   ├── integration/           # Integration tests
 │   └── __init__.py
-├── config.example.json        # Example configuration
-├── config.test.json          # Test configuration
+├── .env.example              # Example environment configuration
 ├── test_server.py            # Server test script
 ├── requirements.txt          # Python dependencies
 ├── pyproject.toml           # Project configuration
