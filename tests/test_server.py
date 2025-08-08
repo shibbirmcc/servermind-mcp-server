@@ -1,84 +1,108 @@
 #!/usr/bin/env python3
 """
-Comprehensive tests for the FastMCP-based server
+Comprehensive tests for the FastMCP-based Splunk server
 """
 
 import pytest
 import asyncio
-import subprocess
 from unittest.mock import patch, MagicMock, AsyncMock
 from starlette.testclient import TestClient
 from starlette.applications import Starlette
+from mcp.types import TextContent
 
-from src.server import mcp, cm, create_starlette_app, main
+from src.server import mcp, splunk_search, create_starlette_app, main
 from mcp.server.fastmcp.server import Context
 
 
-class TestCommandTool:
-    """Test the command execution tool."""
+class TestSplunkSearchTool:
+    """Test the Splunk search tool."""
     
-    def test_cm_successful_command(self):
-        """Test successful command execution."""
+    @pytest.mark.asyncio
+    async def test_splunk_search_successful(self):
+        """Test successful Splunk search execution."""
         context = Context()
         
-        with patch('subprocess.run') as mock_run:
-            mock_result = MagicMock()
-            mock_result.stdout = "Hello World\n"
-            mock_result.stderr = ""
-            mock_result.returncode = 0
-            mock_run.return_value = mock_result
+        # Mock the search tool
+        with patch('src.server.get_search_tool') as mock_get_tool:
+            mock_tool = MagicMock()
+            mock_get_tool.return_value = mock_tool
             
-            result = cm("echo 'Hello World'", context)
-            
-            assert "Command: echo 'Hello World'" in result
-            assert "Exit code: 0" in result
-            assert "Hello World" in result
-            mock_run.assert_called_once_with(
-                "echo 'Hello World'",
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=30
+            # Mock successful search results
+            mock_result = TextContent(
+                type="text",
+                text="✅ **Splunk Search Completed**\n\nQuery: search index=main\nResults: 5 events"
             )
+            mock_tool.execute = AsyncMock(return_value=[mock_result])
+            
+            result = await splunk_search("search index=main", context=context)
+            
+            assert "Splunk Search Completed" in result
+            assert "Query: search index=main" in result
+            mock_tool.execute.assert_called_once()
     
-    def test_cm_command_with_stderr(self):
-        """Test command execution with stderr output."""
+    @pytest.mark.asyncio
+    async def test_splunk_search_with_parameters(self):
+        """Test Splunk search with custom parameters."""
         context = Context()
         
-        with patch('subprocess.run') as mock_run:
-            mock_result = MagicMock()
-            mock_result.stdout = ""
-            mock_result.stderr = "Error message\n"
-            mock_result.returncode = 1
-            mock_run.return_value = mock_result
+        with patch('src.server.get_search_tool') as mock_get_tool:
+            mock_tool = MagicMock()
+            mock_get_tool.return_value = mock_tool
             
-            result = cm("invalid_command", context)
+            mock_result = TextContent(
+                type="text",
+                text="✅ **Splunk Search Completed**\n\nQuery: search error\nResults: 10 events"
+            )
+            mock_tool.execute = AsyncMock(return_value=[mock_result])
             
-            assert "Command: invalid_command" in result
-            assert "Exit code: 1" in result
-            assert "Error message" in result
+            result = await splunk_search(
+                query="search error",
+                earliest_time="-1h",
+                latest_time="now",
+                max_results=50,
+                timeout=120,
+                context=context
+            )
+            
+            assert "Splunk Search Completed" in result
+            # Verify the arguments passed to the tool
+            call_args = mock_tool.execute.call_args[0][0]
+            assert call_args["query"] == "search error"
+            assert call_args["earliest_time"] == "-1h"
+            assert call_args["max_results"] == 50
+            assert call_args["timeout"] == 120
     
-    def test_cm_command_timeout(self):
-        """Test command execution timeout."""
+    @pytest.mark.asyncio
+    async def test_splunk_search_no_results(self):
+        """Test Splunk search with no results."""
         context = Context()
         
-        with patch('subprocess.run') as mock_run:
-            mock_run.side_effect = subprocess.TimeoutExpired("sleep 60", 30)
+        with patch('src.server.get_search_tool') as mock_get_tool:
+            mock_tool = MagicMock()
+            mock_get_tool.return_value = mock_tool
             
-            result = cm("sleep 60", context)
+            # Mock empty results
+            mock_tool.execute = AsyncMock(return_value=[])
             
-            assert "Command timed out: sleep 60" in result
+            result = await splunk_search("search nonexistent", context=context)
+            
+            assert "No results returned from search" in result
     
-    def test_cm_command_exception(self):
-        """Test command execution with exception."""
+    @pytest.mark.asyncio
+    async def test_splunk_search_exception(self):
+        """Test Splunk search with exception."""
         context = Context()
         
-        with patch('subprocess.run') as mock_run:
-            mock_run.side_effect = Exception("Unexpected error")
+        with patch('src.server.get_search_tool') as mock_get_tool:
+            mock_tool = MagicMock()
+            mock_get_tool.return_value = mock_tool
             
-            result = cm("some_command", context)
+            # Mock exception
+            mock_tool.execute = AsyncMock(side_effect=Exception("Connection failed"))
             
-            assert "Error executing command: Unexpected error" in result
+            result = await splunk_search("search index=main", context=context)
+            
+            assert "Error executing search: Connection failed" in result
 
 
 class TestStarletteApp:
@@ -145,13 +169,13 @@ class TestMCPServerIntegration:
         assert hasattr(mcp, '_mcp_server')
     
     def test_tool_registration(self):
-        """Test that the cm tool is registered."""
+        """Test that the splunk_search tool is registered."""
         # The tool should be registered with the MCP instance
         assert hasattr(mcp, '_tool_manager')
         assert hasattr(mcp._tool_manager, '_tools')
         # Check if our tool function is in the registered tools
         tool_names = list(mcp._tool_manager._tools.keys())
-        assert 'cm' in tool_names
+        assert 'splunk_search' in tool_names
 
 
 class TestSSETransportIntegration:
@@ -212,38 +236,45 @@ class TestAsyncHandlers:
 class TestErrorHandling:
     """Test error handling scenarios."""
     
-    def test_cm_with_empty_command(self):
-        """Test command execution with empty command."""
+    @pytest.mark.asyncio
+    async def test_splunk_search_with_empty_query(self):
+        """Test search with empty query."""
         context = Context()
         
-        with patch('subprocess.run') as mock_run:
-            mock_result = MagicMock()
-            mock_result.stdout = ""
-            mock_result.stderr = ""
-            mock_result.returncode = 0
-            mock_run.return_value = mock_result
+        with patch('src.server.get_search_tool') as mock_get_tool:
+            mock_tool = MagicMock()
+            mock_get_tool.return_value = mock_tool
             
-            result = cm("", context)
+            # Mock error for empty query
+            mock_result = TextContent(
+                type="text",
+                text="❌ **Invalid Arguments**\n\nError: Query parameter is required"
+            )
+            mock_tool.execute = AsyncMock(return_value=[mock_result])
             
-            assert "Command: " in result
-            assert "Exit code: 0" in result
+            result = await splunk_search("", context=context)
+            
+            assert "Invalid Arguments" in result or "Query parameter is required" in result
     
-    def test_cm_with_special_characters(self):
-        """Test command execution with special characters."""
+    @pytest.mark.asyncio
+    async def test_splunk_search_connection_error(self):
+        """Test search with connection error."""
         context = Context()
-        command_with_special_chars = "echo 'Hello & World | Test'"
         
-        with patch('subprocess.run') as mock_run:
-            mock_result = MagicMock()
-            mock_result.stdout = "Hello & World | Test\n"
-            mock_result.stderr = ""
-            mock_result.returncode = 0
-            mock_run.return_value = mock_result
+        with patch('src.server.get_search_tool') as mock_get_tool:
+            mock_tool = MagicMock()
+            mock_get_tool.return_value = mock_tool
             
-            result = cm(command_with_special_chars, context)
+            # Mock connection error
+            mock_result = TextContent(
+                type="text",
+                text="❌ **Splunk Connection Error**\n\nFailed to connect to Splunk"
+            )
+            mock_tool.execute = AsyncMock(return_value=[mock_result])
             
-            assert f"Command: {command_with_special_chars}" in result
-            assert "Hello & World | Test" in result
+            result = await splunk_search("search index=main", context=context)
+            
+            assert "Splunk Connection Error" in result
 
 
 if __name__ == "__main__":

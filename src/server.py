@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-MCP server with SSE transport exposing a command execution tool
+MCP server with SSE transport exposing Splunk search tool
 Following the working FastMCP pattern
 """
 
-import subprocess
 import sys
+from typing import Dict, Any, List
 from mcp.server.fastmcp import FastMCP
 import uvicorn
 from mcp.server.fastmcp.server import Context
@@ -14,27 +14,44 @@ from starlette.applications import Starlette
 from mcp.server.sse import SseServerTransport
 from starlette.requests import Request
 from starlette.routing import Mount, Route
+from mcp.types import TextContent
+
+from .tools.search import get_search_tool
 
 # Create FastMCP instance
-mcp = FastMCP("basic-mcp-server")
+mcp = FastMCP("splunk-mcp-server")
 
 @mcp.tool()
-def cm(command: str, context: Context) -> str:
-    """Execute command line commands"""
+async def splunk_search(
+    query: str,
+    earliest_time: str = "-24h",
+    latest_time: str = "now", 
+    max_results: int = 100,
+    timeout: int = 300,
+    context: Context = None
+) -> str:
+    """Execute a Splunk search query using SPL (Search Processing Language)"""
     try:
-        result = subprocess.run(
-            command, 
-            shell=True, 
-            capture_output=True, 
-            text=True,
-            timeout=30
-        )
-        output = result.stdout + result.stderr
-        return f"Command: {command}\nExit code: {result.returncode}\nOutput:\n{output}"
-    except subprocess.TimeoutExpired:
-        return f"Command timed out: {command}"
+        # Get the search tool and execute
+        search_tool = get_search_tool()
+        arguments = {
+            "query": query,
+            "earliest_time": earliest_time,
+            "latest_time": latest_time,
+            "max_results": max_results,
+            "timeout": timeout
+        }
+        
+        results = await search_tool.execute(arguments)
+        
+        # Convert TextContent results to string
+        if results and len(results) > 0:
+            return results[0].text
+        else:
+            return "No results returned from search"
+            
     except Exception as e:
-        return f"Error executing command: {str(e)}"
+        return f"Error executing search: {str(e)}"
 
 def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlette:
     sse = SseServerTransport("/messages")
@@ -67,10 +84,12 @@ def main():
     mcp_server = mcp._mcp_server
     starlette_app = create_starlette_app(mcp_server, debug=True)
     
-    print(f"MCP Server running on http://localhost:{port}")
+    print(f"Splunk MCP Server running on http://localhost:{port}")
     print("Endpoints:")
     print(f"  SSE: http://localhost:{port}/sse")
     print(f"  Messages: http://localhost:{port}/messages/")
+    print("Tools:")
+    print(f"  - splunk_search: Execute Splunk search queries")
     
     uvicorn.run(starlette_app, host="0.0.0.0", port=port)
 
