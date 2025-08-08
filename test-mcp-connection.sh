@@ -17,16 +17,18 @@ NC='\033[0m' # No Color
 
 # Configuration
 SPLUNK_HOST="127.0.0.1"
-SPLUNK_TOKEN="eyJraWQiOiJzcGx1bmsuc2VjcmV0IiwiYWxnIjoiSFM1MTIiLCJ2ZXIiOiJ2MiIsInR0eXAiOiJzdGF0aWMifQ.eyJpc3MiOiJhZG1pbiBmcm9tIDhhNTQ1YWZiZjVhNiIsInN1YiI6ImFkbWluIiwiYXVkIjoibWNwLXRva2VuIiwiaWRwIjoiU3BsdW5rIiwianRpIjoiYmZjZjMxMDgwZmU2YWM1YzQ3MTYxNjY4ZmQzODRmMzFhMjJlYzYyNTc0NTA1ZWFjYmNkOTE2MjcwNDRiZGI2YSIsImlhdCI6MTc1NDU4NDI3MSwiZXhwIjoxNzg4MjEzNTg2LCJuYnIiOjE3NTQ1ODQyNzF9.2FRE8NXKxmjUF_64zBJzncf59aBWcyOV74HMNndprvpz47TR11GnNLvEoibvQq_oAokN5M6hrBGXCfu7fF2N_A"
+SPLUNK_USERNAME="admin"
+SPLUNK_PASSWORD="changeme123"
 SPLUNK_VERIFY_SSL="false"
 
 echo -e "${BLUE}Step 1: Starting MCP Server Container${NC}"
-echo "Command: SPLUNK_HOST=$SPLUNK_HOST SPLUNK_TOKEN=<token> SPLUNK_VERIFY_SSL=$SPLUNK_VERIFY_SSL ./docker-run-env.sh"
+echo "Command: SPLUNK_HOST=$SPLUNK_HOST SPLUNK_USERNAME=$SPLUNK_USERNAME SPLUNK_PASSWORD=<password> SPLUNK_VERIFY_SSL=$SPLUNK_VERIFY_SSL ./docker-run-env.sh"
 echo ""
 
 # Start the container
 SPLUNK_HOST="$SPLUNK_HOST" \
-SPLUNK_TOKEN="$SPLUNK_TOKEN" \
+SPLUNK_USERNAME="$SPLUNK_USERNAME" \
+SPLUNK_PASSWORD="$SPLUNK_PASSWORD" \
 SPLUNK_VERIFY_SSL="$SPLUNK_VERIFY_SSL" \
 ./docker-run-env.sh > /dev/null 2>&1 || true
 
@@ -52,7 +54,8 @@ INIT_REQUEST='{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"pr
 
 RESPONSE=$(echo "$INIT_REQUEST" | \
     SPLUNK_HOST="$SPLUNK_HOST" \
-    SPLUNK_TOKEN="$SPLUNK_TOKEN" \
+    SPLUNK_USERNAME="$SPLUNK_USERNAME" \
+    SPLUNK_PASSWORD="$SPLUNK_PASSWORD" \
     SPLUNK_VERIFY_SSL="$SPLUNK_VERIFY_SSL" \
     python -m src.server 2>/dev/null | tail -1)
 
@@ -70,7 +73,8 @@ TOOLS_REQUEST='{"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}
 
 TOOLS_RESPONSE=$(echo "$TOOLS_REQUEST" | \
     SPLUNK_HOST="$SPLUNK_HOST" \
-    SPLUNK_TOKEN="$SPLUNK_TOKEN" \
+    SPLUNK_USERNAME="$SPLUNK_USERNAME" \
+    SPLUNK_PASSWORD="$SPLUNK_PASSWORD" \
     SPLUNK_VERIFY_SSL="$SPLUNK_VERIFY_SSL" \
     python -m src.server 2>/dev/null | tail -1)
 
@@ -87,7 +91,8 @@ RESOURCES_REQUEST='{"jsonrpc": "2.0", "id": 3, "method": "resources/list", "para
 
 RESOURCES_RESPONSE=$(echo "$RESOURCES_REQUEST" | \
     SPLUNK_HOST="$SPLUNK_HOST" \
-    SPLUNK_TOKEN="$SPLUNK_TOKEN" \
+    SPLUNK_USERNAME="$SPLUNK_USERNAME" \
+    SPLUNK_PASSWORD="$SPLUNK_PASSWORD" \
     SPLUNK_VERIFY_SSL="$SPLUNK_VERIFY_SSL" \
     python -m src.server 2>/dev/null | tail -1)
 

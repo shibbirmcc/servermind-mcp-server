@@ -38,7 +38,8 @@ show_usage() {
     echo ""
     echo "Environment Variables (required):"
     echo "  SPLUNK_HOST        - Splunk server hostname/IP"
-    echo "  SPLUNK_TOKEN       - Splunk API token"
+    echo "  SPLUNK_USERNAME    - Splunk username"
+    echo "  SPLUNK_PASSWORD    - Splunk password"
     echo ""
     echo "Optional Environment Variables:"
     echo "  SPLUNK_PORT        - Splunk management port (default: 8089)"
@@ -48,11 +49,11 @@ show_usage() {
     echo "  LOG_LEVEL          - DEBUG, INFO, WARNING, ERROR (default: INFO)"
     echo ""
     echo "Examples:"
-    echo "  # Basic usage with API token:"
-    echo "  SPLUNK_HOST=localhost SPLUNK_TOKEN=your-token $0"
+    echo "  # Basic usage with username/password:"
+    echo "  SPLUNK_HOST=localhost SPLUNK_USERNAME=admin SPLUNK_PASSWORD=changeme123 $0"
     echo ""
     echo "  # With additional options:"
-    echo "  SPLUNK_HOST=splunk.company.com SPLUNK_TOKEN=your-token SPLUNK_VERIFY_SSL=false LOG_LEVEL=DEBUG $0"
+    echo "  SPLUNK_HOST=splunk.company.com SPLUNK_USERNAME=admin SPLUNK_PASSWORD=changeme123 SPLUNK_VERIFY_SSL=false LOG_LEVEL=DEBUG $0"
     echo ""
     echo "Commands:"
     echo "  build    - Only build the Docker image"
@@ -74,8 +75,8 @@ validate_env() {
         exit 1
     fi
 
-    if [ -z "$SPLUNK_TOKEN" ]; then
-        print_error "SPLUNK_TOKEN environment variable is required"
+    if [ -z "$SPLUNK_USERNAME" ] || [ -z "$SPLUNK_PASSWORD" ]; then
+        print_error "Both SPLUNK_USERNAME and SPLUNK_PASSWORD environment variables are required"
         show_usage
         exit 1
     fi
@@ -113,8 +114,9 @@ run_container() {
     ENV_ARGS="$ENV_ARGS -e LOG_LEVEL=${LOG_LEVEL:-INFO}"
     
     # Add authentication variables
-    ENV_ARGS="$ENV_ARGS -e SPLUNK_TOKEN=$SPLUNK_TOKEN"
-    print_status "Using token authentication"
+    ENV_ARGS="$ENV_ARGS -e SPLUNK_USERNAME=$SPLUNK_USERNAME"
+    ENV_ARGS="$ENV_ARGS -e SPLUNK_PASSWORD=$SPLUNK_PASSWORD"
+    print_status "Using username/password authentication"
     
     # Add MCP configuration
     ENV_ARGS="$ENV_ARGS -e MCP_SERVER_NAME=${MCP_SERVER_NAME:-splunk-mcp-server}"
@@ -140,7 +142,7 @@ run_container() {
         echo "  Image: $IMAGE_NAME"
         echo "  Status: Running"
         echo "  Splunk Host: $SPLUNK_HOST"
-        echo "  Authentication: Token"
+        echo "  Authentication: Username/Password"
         echo ""
         echo "Useful Commands:"
         echo "  View logs: $0 logs"

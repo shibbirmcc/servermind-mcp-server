@@ -17,7 +17,6 @@ class SplunkConfig:
     port: int
     username: str = ""
     password: str = ""
-    token: str = ""
     scheme: str = "https"
     version: str = "8.0"
     verify_ssl: bool = True
@@ -105,7 +104,6 @@ class ConfigLoader:
             'SPLUNK_PORT': ('splunk', 'port'),
             'SPLUNK_USERNAME': ('splunk', 'username'),
             'SPLUNK_PASSWORD': ('splunk', 'password'),
-            'SPLUNK_TOKEN': ('splunk', 'token'),
             'SPLUNK_SCHEME': ('splunk', 'scheme'),
             'SPLUNK_VERSION': ('splunk', 'version'),
             'SPLUNK_VERIFY_SSL': ('splunk', 'verify_ssl'),
@@ -144,25 +142,23 @@ class ConfigLoader:
         splunk_data = config_data.get('splunk', {})
         mcp_data = config_data.get('mcp', {})
         
-        # Validate required Splunk fields - either token OR username/password
+        # Validate required Splunk fields - username and password required
         host = splunk_data.get('host')
-        token = splunk_data.get('token')
         username = splunk_data.get('username')
         password = splunk_data.get('password')
         
         if not host:
             raise ValueError("Missing required Splunk configuration field: host")
         
-        if not token and not (username and password):
-            raise ValueError("Must provide either SPLUNK_TOKEN or both SPLUNK_USERNAME and SPLUNK_PASSWORD")
+        if not (username and password):
+            raise ValueError("Must provide both SPLUNK_USERNAME and SPLUNK_PASSWORD")
         
         # Create Splunk config
         splunk_config = SplunkConfig(
             host=host,
             port=splunk_data.get('port', 8089),
-            username=username or "",
-            password=password or "",
-            token=token or "",
+            username=username,
+            password=password,
             scheme=splunk_data.get('scheme', 'https'),
             version=splunk_data.get('version', '8.0'),
             verify_ssl=splunk_data.get('verify_ssl', True),
