@@ -45,7 +45,7 @@ if [ ! -f .env ]; then
     if [ -f .env.example ]; then
         cp .env.example .env
         print_warning "Please edit .env file with your Splunk credentials before running the container."
-        print_warning "Required variables: SPLUNK_HOST, SPLUNK_TOKEN"
+        print_warning "Required variables: SPLUNK_HOST, SPLUNK_USERNAME, SPLUNK_PASSWORD"
         exit 1
     else
         print_error ".env.example file not found. Cannot create .env file."
@@ -62,8 +62,13 @@ if [ -z "$SPLUNK_HOST" ] || [ "$SPLUNK_HOST" = "your-splunk-host.com" ]; then
     exit 1
 fi
 
-if [ -z "$SPLUNK_TOKEN" ] || [ "$SPLUNK_TOKEN" = "your-token-here" ]; then
-    print_error "SPLUNK_TOKEN is not set or still has default value. Please update .env file."
+if [ -z "$SPLUNK_USERNAME" ] || [ "$SPLUNK_USERNAME" = "your-username-here" ]; then
+    print_error "SPLUNK_USERNAME is not set or still has default value. Please update .env file."
+    exit 1
+fi
+
+if [ -z "$SPLUNK_PASSWORD" ] || [ "$SPLUNK_PASSWORD" = "your-password-here" ]; then
+    print_error "SPLUNK_PASSWORD is not set or still has default value. Please update .env file."
     exit 1
 fi
 

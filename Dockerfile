@@ -29,7 +29,6 @@ USER mcpuser
 # Set environment variables with defaults
 ENV SPLUNK_HOST=""
 ENV SPLUNK_PORT=8089
-ENV SPLUNK_TOKEN=""
 ENV SPLUNK_SCHEME=https
 ENV SPLUNK_VERIFY_SSL=true
 ENV SPLUNK_TIMEOUT=30
