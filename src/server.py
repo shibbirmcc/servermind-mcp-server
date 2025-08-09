@@ -20,6 +20,7 @@ from mcp.types import TextContent
 from src.tools.search import get_search_tool
 from src.tools.indexes import get_indexes_tool
 from src.tools.export import get_export_tool
+from src.tools.monitor import get_monitor_tool
 
 # Create FastMCP instance
 mcp = FastMCP("splunk-mcp-server")
@@ -115,6 +116,57 @@ async def splunk_export(
     except Exception as e:
         return f"Error executing export: {str(e)}"
 
+@mcp.tool()
+async def splunk_monitor(
+    action: str,
+    query: str = None,
+    interval: int = 60,
+    max_results: int = 1000,
+    timeout: int = 60,
+    clear_buffer: bool = True,
+    context: Context = None
+) -> str:
+    """Start continuous monitoring of Splunk logs with specified intervals. 
+    
+    This tool creates a single monitoring session that runs in the background, collecting logs 
+    at regular intervals and buffering results for analysis. Only one monitoring session 
+    can be active at a time.
+    
+    Actions:
+    - start: Begin monitoring with a query and interval
+    - stop: Stop the current monitoring session
+    - status: Get status of the current monitoring session
+    - get_results: Retrieve buffered results from the session
+    """
+    try:
+        # Get the monitor tool and execute
+        monitor_tool = get_monitor_tool()
+        arguments = {
+            "action": action
+        }
+        
+        if query is not None:
+            arguments["query"] = query
+        if interval != 60:
+            arguments["interval"] = interval
+        if max_results != 1000:
+            arguments["max_results"] = max_results
+        if timeout != 60:
+            arguments["timeout"] = timeout
+        if not clear_buffer:
+            arguments["clear_buffer"] = clear_buffer
+        
+        results = await monitor_tool.execute(arguments)
+        
+        # Convert TextContent results to string
+        if results and len(results) > 0:
+            return results[0].text
+        else:
+            return "No results returned from monitor"
+            
+    except Exception as e:
+        return f"Error executing monitor: {str(e)}"
+
 def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlette:
     sse = SseServerTransport("/messages")
     
@@ -163,6 +215,7 @@ def main():
     print(f"  - splunk_search: Execute Splunk search queries")
     print(f"  - splunk_indexes: List available Splunk indexes")
     print(f"  - splunk_export: Export Splunk search results to various formats")
+    print(f"  - splunk_monitor: Start continuous monitoring of Splunk logs")
     
     uvicorn.run(starlette_app, host="0.0.0.0", port=port)
 
