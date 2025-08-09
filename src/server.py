@@ -19,6 +19,7 @@ from mcp.types import TextContent
 
 from src.tools.search import get_search_tool
 from src.tools.indexes import get_indexes_tool
+from src.tools.export import get_export_tool
 
 # Create FastMCP instance
 mcp = FastMCP("splunk-mcp-server")
@@ -76,6 +77,44 @@ async def splunk_indexes(
     except Exception as e:
         return f"Error retrieving indexes: {str(e)}"
 
+@mcp.tool()
+async def splunk_export(
+    query: str,
+    format: str = "json",
+    earliest_time: str = "-24h",
+    latest_time: str = "now",
+    max_results: int = 1000,
+    timeout: int = 300,
+    fields: List[str] = None,
+    context: Context = None
+) -> str:
+    """Export Splunk search results to various formats (JSON, CSV, XML)"""
+    try:
+        # Get the export tool and execute
+        export_tool = get_export_tool()
+        arguments = {
+            "query": query,
+            "format": format,
+            "earliest_time": earliest_time,
+            "latest_time": latest_time,
+            "max_results": max_results,
+            "timeout": timeout
+        }
+        
+        if fields is not None:
+            arguments["fields"] = fields
+        
+        results = await export_tool.execute(arguments)
+        
+        # Convert TextContent results to string
+        if results and len(results) > 0:
+            return results[0].text
+        else:
+            return "No results returned from export"
+            
+    except Exception as e:
+        return f"Error executing export: {str(e)}"
+
 def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlette:
     sse = SseServerTransport("/messages")
     
@@ -123,6 +162,7 @@ def main():
     print("Tools:")
     print(f"  - splunk_search: Execute Splunk search queries")
     print(f"  - splunk_indexes: List available Splunk indexes")
+    print(f"  - splunk_export: Export Splunk search results to various formats")
     
     uvicorn.run(starlette_app, host="0.0.0.0", port=port)
 
