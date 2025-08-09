@@ -34,7 +34,18 @@ async def splunk_search(
     timeout: int = 300,
     context: Context = None
 ) -> str:
-    """Execute a Splunk search query using SPL (Search Processing Language)"""
+    """Execute a Splunk search query using SPL (Search Processing Language).
+    
+    Args:
+        query: SPL search query to execute (e.g., 'index=main error', 'search sourcetype=access_log | stats count by host')
+        earliest_time: Start time for search. Supports relative time (e.g., '-24h', '-1d', '-7d') or absolute time (e.g., '2023-01-01T00:00:00')
+        latest_time: End time for search. Use 'now' for current time or absolute time (e.g., '2023-01-02T00:00:00')
+        max_results: Maximum number of results to return (1-10000, default: 100)
+        timeout: Search timeout in seconds (10-3600, default: 300)
+    
+    Returns:
+        Formatted search results with analysis suggestions and metadata
+    """
     try:
         # Get the search tool and execute
         search_tool = get_search_tool()
@@ -59,13 +70,36 @@ async def splunk_search(
 
 @mcp.tool()
 async def splunk_indexes(
+    filter_pattern: str = None,
+    include_disabled: bool = True,
+    sort_by: str = "name",
+    sort_order: str = "asc",
     context: Context = None
 ) -> str:
-    """List available Splunk indexes with their metadata"""
+    """List and get information about Splunk indexes with filtering and sorting options.
+    
+    Args:
+        filter_pattern: Optional pattern to filter index names (case-insensitive substring match)
+        include_disabled: Whether to include disabled indexes in the results (default: True)
+        sort_by: Field to sort results by - options: 'name', 'size', 'events', 'earliest', 'latest' (default: 'name')
+        sort_order: Sort order - 'asc' for ascending or 'desc' for descending (default: 'asc')
+    
+    Returns:
+        Comprehensive index information including size, event counts, time ranges, and usage suggestions
+    """
     try:
         # Get the indexes tool and execute
         indexes_tool = get_indexes_tool()
         arguments = {}
+        
+        if filter_pattern is not None:
+            arguments["filter_pattern"] = filter_pattern
+        if include_disabled is not None:
+            arguments["include_disabled"] = include_disabled
+        if sort_by != "name":
+            arguments["sort_by"] = sort_by
+        if sort_order != "asc":
+            arguments["sort_order"] = sort_order
         
         results = await indexes_tool.execute(arguments)
         
@@ -89,7 +123,20 @@ async def splunk_export(
     fields: List[str] = None,
     context: Context = None
 ) -> str:
-    """Export Splunk search results to various formats (JSON, CSV, XML)"""
+    """Export Splunk search results to various formats for data analysis and integration.
+    
+    Args:
+        query: SPL search query to execute and export results (e.g., 'index=main | stats count by host')
+        format: Export format - 'json' (programmatic use), 'csv' (spreadsheets), or 'xml' (structured data) (default: 'json')
+        earliest_time: Start time for search. Supports relative time (e.g., '-24h', '-1d') or absolute time (default: '-24h')
+        latest_time: End time for search. Use 'now' for current time or absolute time (default: 'now')
+        max_results: Maximum number of results to export (1-50000, default: 1000)
+        timeout: Search timeout in seconds (10-3600, default: 300)
+        fields: Specific fields to include in export (optional, exports all fields if not specified)
+    
+    Returns:
+        Exported data in the specified format with size information and processing suggestions
+    """
     try:
         # Get the export tool and execute
         export_tool = get_export_tool()
@@ -126,17 +173,26 @@ async def splunk_monitor(
     clear_buffer: bool = True,
     context: Context = None
 ) -> str:
-    """Start continuous monitoring of Splunk logs with specified intervals. 
+    """Start continuous monitoring of Splunk logs with specified intervals for real-time analysis.
     
     This tool creates a single monitoring session that runs in the background, collecting logs 
     at regular intervals and buffering results for analysis. Only one monitoring session 
     can be active at a time.
     
-    Actions:
-    - start: Begin monitoring with a query and interval
-    - stop: Stop the current monitoring session
-    - status: Get status of the current monitoring session
-    - get_results: Retrieve buffered results from the session
+    Args:
+        action: Action to perform:
+            - 'start': Begin monitoring with a query and interval (requires query parameter)
+            - 'stop': Stop the current monitoring session
+            - 'status': Get status of the current monitoring session
+            - 'get_results': Retrieve buffered results from the session
+        query: SPL search query to monitor (required for 'start' action, e.g., 'index=main error | head 100')
+        interval: Monitoring interval in seconds (10-3600, default: 60) - how often to check for new data
+        max_results: Maximum results per monitoring check (1-10000, default: 1000)
+        timeout: Search timeout in seconds for each monitoring check (10-300, default: 60)
+        clear_buffer: Whether to clear results buffer after retrieving (for get_results action, default: True)
+    
+    Returns:
+        Monitoring session status, buffered results, or confirmation messages with analysis suggestions
     """
     try:
         # Get the monitor tool and execute
