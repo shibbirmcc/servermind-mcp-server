@@ -1,0 +1,37 @@
+You are shaping expanded Splunk results for analysis.
+
+Input:
+- logsRef: {{logsRef}}
+
+Normalize identifiers:
+- Treat any of: traceId, trace_id, correlationId, correlation_id, corrId, requestId, reqId, req_id
+- Use the alias "traceKey".
+- If a row lacks all of these, it does not belong to any trace group.
+
+Task:
+1) Group all rows by traceKey.
+2) For each traceKey, order rows by _time ASC.
+3) Produce a compact structure with no raw duplication.
+
+Output JSON ONLY as a plan to call the analysis step:
+
+{
+  "kind": "plan",
+  "next": [
+    {
+      "type": "tool",
+      "toolName": "splunk_log_analysis_prompt",
+      "args": { "logsRef": "state.groupedTraces" },
+      "reason": "Proceed to narrative analysis across grouped traces."
+    }
+  ],
+  "autoExecuteHint": true,
+  "metadata": {
+    "groupedTracesRef": "state.groupedTraces",
+    "traceCount": "<N>"
+  }
+}
+
+Rules:
+- Do not include raw logs in the plan; assume they are stored under state.groupedTraces.
+- Keep the JSON schema exact; no extra text outside JSON.

@@ -1,0 +1,12 @@
+{
+  "kind": "plan",
+  "next": [
+    {
+      "type": "tool",
+      "toolName": "splunk_search",
+      "args": { "query": "{{query}}" },
+      "reason": "{{reason}}"
+    }
+  ],
+  "autoExecuteHint": true
+}
