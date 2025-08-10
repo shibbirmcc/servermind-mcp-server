@@ -1,0 +1,29 @@
+Input: a concise incident analysis narrative.
+
+Task:
+- Propose up to 3 root-cause hypotheses.
+- For each, provide:
+  - evidence: brief references to logs/services (no raw logs),
+  - mechanism: how it leads to the impact,
+  - confidence: 0–1,
+  - quickTest: a fast check to confirm/falsify.
+
+Return JSON ONLY (FINAL OUTPUT). Do NOT plan another tool. Use this schema:
+
+{
+  "rootCauses": [
+    {
+      "hypothesis": "<short statement>",
+      "evidence": ["<brief ref>", "<brief ref>"],
+      "mechanism": "<short explanation>",
+      "confidence": 0.0,
+      "quickTest": "<fast validation step>"
+    }
+  ],
+  "notes": "<optional short notes>"
+}
+
+Rules:
+- Keep bullets tight and actionable.
+- Confidence is a float 0–1.
+- No extra text outside the JSON object.

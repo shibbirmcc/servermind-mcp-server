@@ -1,0 +1,34 @@
+You are building a single Splunk SPL to fetch ALL logs for the given traceKeys.
+
+Inputs:
+- traceIds: {{traceIds}}
+- indices: {{indices}}
+- earliest: {{earliest}}
+- latest: {{latest}}
+
+Rules:
+- Normalize the identifier to "traceKey":
+  eval traceKey=coalesce(traceId, trace_id, correlationId, correlation_id, corrId, requestId, reqId, req_id)
+- Build an indices clause:
+  - If multiple indices, (index=A OR index=B ...); if none provided, omit index clause.
+- Filter to traceKey IN (list of provided IDs).
+- Include fields helpful for narrative:
+  _time host service level logger msg traceKey traceId correlationId requestId status path errorCode
+- Sort by _time ASC for timeline; do not cap rows.
+
+Output JSON ONLY as a plan to run splunk_search:
+
+{
+  "kind": "plan",
+  "next": [
+    {
+      "type": "tool",
+      "toolName": "splunk_search",
+      "args": { "query": "<SPL HERE>" },
+      "reason": "Fetch full narratives for the selected traceKeys."
+    }
+  ],
+  "autoExecuteHint": true
+}
+
+Return only JSON. No explanations outside the JSON.

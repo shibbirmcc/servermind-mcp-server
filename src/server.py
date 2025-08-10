@@ -27,6 +27,18 @@ from src.config import get_config
 # Get configuration to determine server name
 config = get_config()
 server_name = config.mcp.server_name
+from src.tools.chain_1_prompt import get_chain_1_prompt_tool
+from src.tools.chain_2_prompt import get_chain_2_prompt_tool
+from src.tools.chain_3_prompt import get_chain_3_prompt_tool
+from src.tools.expand_fetch_by_traceids import get_expand_fetch_by_traceids_tool
+from src.tools.find_splunk_index_in_repo import get_find_splunk_index_in_repo_tool
+from src.tools.group_results_by_traceid import get_group_results_by_traceid_tool
+from src.tools.logs_debug_entry import get_logs_debug_entry_tool
+from src.tools.logs_evaluation_prompt import get_splunk_log_evaluation_tool
+from src.tools.resolve_splunk_index import get_resolve_splunk_index_tool
+from src.tools.root_cause_identification_prompt import get_root_cause_identification_prompt_tool
+from src.tools.splunk_log_analysis import get_splunk_log_analysis_prompt_tool
+from src.tools.splunk_query_prompt import get_splunk_query_prompt_tool
 
 # Create FastMCP instance
 mcp = FastMCP(server_name)
@@ -41,14 +53,14 @@ async def splunk_search(
     context: Context = None
 ) -> str:
     """Execute a Splunk search query using SPL (Search Processing Language).
-    
+
     Args:
         query: SPL search query to execute (e.g., 'index=main error', 'search sourcetype=access_log | stats count by host')
         earliest_time: Start time for search. Supports relative time (e.g., '-24h', '-1d', '-7d') or absolute time (e.g., '2023-01-01T00:00:00')
         latest_time: End time for search. Use 'now' for current time or absolute time (e.g., '2023-01-02T00:00:00')
         max_results: Maximum number of results to return (1-10000, default: 100)
         timeout: Search timeout in seconds (10-3600, default: 300)
-    
+
     Returns:
         Formatted search results with analysis suggestions and metadata
     """
@@ -83,13 +95,13 @@ async def splunk_indexes(
     context: Context = None
 ) -> str:
     """List and get information about Splunk indexes with filtering and sorting options.
-    
+
     Args:
         filter_pattern: Optional pattern to filter index names (case-insensitive substring match)
         include_disabled: Whether to include disabled indexes in the results (default: True)
         sort_by: Field to sort results by - options: 'name', 'size', 'events', 'earliest', 'latest' (default: 'name')
         sort_order: Sort order - 'asc' for ascending or 'desc' for descending (default: 'asc')
-    
+
     Returns:
         Comprehensive index information including size, event counts, time ranges, and usage suggestions
     """
@@ -106,7 +118,7 @@ async def splunk_indexes(
             arguments["sort_by"] = sort_by
         if sort_order != "asc":
             arguments["sort_order"] = sort_order
-        
+
         results = await indexes_tool.execute(arguments)
         
         # Convert TextContent results to string
@@ -130,7 +142,7 @@ async def splunk_export(
     context: Context = None
 ) -> str:
     """Export Splunk search results to various formats for data analysis and integration.
-    
+
     Args:
         query: SPL search query to execute and export results (e.g., 'index=main | stats count by host')
         format: Export format - 'json' (programmatic use), 'csv' (spreadsheets), or 'xml' (structured data) (default: 'json')
@@ -139,7 +151,7 @@ async def splunk_export(
         max_results: Maximum number of results to export (1-50000, default: 1000)
         timeout: Search timeout in seconds (10-3600, default: 300)
         fields: Specific fields to include in export (optional, exports all fields if not specified)
-    
+
     Returns:
         Exported data in the specified format with size information and processing suggestions
     """
@@ -196,7 +208,7 @@ async def splunk_monitor(
         max_results: Maximum results per monitoring check (1-10000, default: 1000)
         timeout: Search timeout in seconds for each monitoring check (10-300, default: 60)
         clear_buffer: Whether to clear results buffer after retrieving (for get_results action, default: True)
-    
+
     Returns:
         Monitoring session status, buffered results, or confirmation messages with analysis suggestions
     """
@@ -247,10 +259,10 @@ async def automated_issue_creation(
     context: Context = None
 ) -> str:
     """Automatically analyze Splunk errors and create GitHub or JIRA issues via external MCP servers.
-    
+
     This tool performs comprehensive error analysis on Splunk search results and automatically creates
     well-formatted issues in GitHub or JIRA using external MCP servers for issue creation.
-    
+
     Args:
         splunk_query: Splunk search query to find errors (e.g., 'index=main error | head 50')
         platform: Platform to create issues on ('github', 'jira', 'both', or 'auto' for intelligent selection)
@@ -263,7 +275,7 @@ async def automated_issue_creation(
         group_similar_errors: Whether to group similar errors into single issues (default: True)
         auto_assign: Username to automatically assign created issues to (optional)
         custom_labels: Additional custom labels to add to created issues (optional)
-    
+
     Returns:
         Comprehensive analysis report with created issue details and error analysis
     """
@@ -277,7 +289,7 @@ async def automated_issue_creation(
             "severity_threshold": severity_threshold,
             "group_similar_errors": group_similar_errors
         }
-        
+
         if github_repo is not None:
             arguments["github_repo"] = github_repo
         if jira_project is not None:
@@ -286,14 +298,14 @@ async def automated_issue_creation(
             arguments["auto_assign"] = auto_assign
         if custom_labels is not None:
             arguments["custom_labels"] = custom_labels
-        
+
         results = await execute_automated_issue_creation(arguments)
-        
+
         if results and len(results) > 0:
             return results[0].text
         else:
             return "Failed to execute automated issue creation"
-            
+
     except Exception as e:
         return f"Error in automated issue creation: {str(e)}"
 
@@ -342,19 +354,31 @@ def main():
     print(f"  SSE: http://localhost:{port}/sse")
     print(f"  Messages: http://localhost:{port}/messages/")
     print("Tools:")
-    
+
     # Splunk tools (always available)
     print("  Splunk Tools:")
     print(f"    - splunk_search: Execute Splunk search queries")
     print(f"    - splunk_indexes: List available Splunk indexes")
     print(f"    - splunk_export: Export Splunk search results to various formats")
     print(f"    - splunk_monitor: Start continuous monitoring of Splunk logs")
+    print(f"  - get_chain_1_prompt: Get a ready-to-use prompt for Chain 1 processing")
+    print(f"  - get_chain_2_prompt: Get a ready-to-use prompt for Chain 2 processing")
+    print(f"  - get_chain_3_prompt: Get a ready-to-use prompt for Chain 3 processing")
+    print(f"  - expand_fetch_by_traceids: Expand and fetch logs by trace IDs")
+    print(f"  - find_splunk_index_in_repo: Search codebase for Splunk index names")
+    print(f"  - group_results_by_traceid: Group search results by trace ID")
+    print(f"  - logs_debug_entry: Entry point for logs debugging workflow")
+    print(f"  - get_logs_evaluation_prompt: Get a ready-to-use prompt for logs evaluation")
+    print(f"  - get_resolve_splunk_index: Determine correct Splunk environment and indices")
+    print(f"  - get_root_cause_identification_prompt: Get a ready-to-use prompt for root cause identification")
+    print(f"  - splunk_log_analysis: Analyze Splunk logs for patterns and insights")
+    print(f"  - get_splunk_query_prompt: Get a ready-to-use prompt for Splunk queries")
     
     # Automated Issue Creation tool (always available - uses external MCP servers)
     print("  Automated Analysis Tools:")
     print(f"    - automated_issue_creation: Analyze Splunk errors and create issues via external MCP servers")
     print(f"      Note: Requires external Atlassian or GitHub MCP servers for issue creation")
-    
+
     uvicorn.run(starlette_app, host="0.0.0.0", port=port)
 
 if __name__ == "__main__":

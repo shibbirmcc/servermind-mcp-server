@@ -1,0 +1,12 @@
+{
+  "kind": "plan",
+  "next": [
+    {
+      "type": "tool",
+      "toolName": "{{nextTool}}",
+      "args": {{argsJson}},
+      "reason": "{{reason}}"
+    }
+  ],
+  "autoExecuteHint": true
+}
