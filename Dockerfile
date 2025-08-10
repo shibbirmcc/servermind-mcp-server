@@ -42,15 +42,19 @@ ENV LOG_LEVEL=INFO
 ENV JIRA_BASE_URL=""
 ENV JIRA_USERNAME=""
 ENV JIRA_API_TOKEN=""
+# Add GitHub environment variables
+ENV GITHUB_TOKEN=""
+ENV GITHUB_API_URL="https://api.github.com"
 ENV MCP_SERVER_TYPE=splunk
 
-# Expose ports for both servers
+# Expose ports for all servers
 EXPOSE 9090  # Splunk MCP
 EXPOSE 9091  # Jira MCP
+EXPOSE 9092  # GitHub MCP
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import sys; sys.path.insert(0, 'src'); from src.config import get_config; get_config()" || exit 1
 
-# Updated command to support both servers
-CMD ["sh", "-c", "if [ \"$MCP_SERVER_TYPE\" = \"jira\" ]; then uvicorn src.jira_server:app --host 0.0.0.0 --port 9091; else python -m src.server; fi"]
+# Updated command to support all servers
+CMD ["sh", "-c", "if [ \"$MCP_SERVER_TYPE\" = \"github\" ]; then uvicorn src.github_server:app --host 0.0.0.0 --port 9092; elif [ \"$MCP_SERVER_TYPE\" = \"jira\" ]; then uvicorn src.jira_server:app --host 0.0.0.0 --port 9091; else python -m src.server; fi"]
