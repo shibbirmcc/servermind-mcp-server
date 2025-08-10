@@ -1,0 +1,36 @@
+meta {
+  name: List Resources
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/messages/?session_id={{sessionId}}
+  body: json
+  auth: inherit
+}
+
+params:query {
+  session_id: {{sessionId}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "jsonrpc": "2.0",
+    "id": 3,
+    "method": "resources/list",
+    "params": {}
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  List available resources
+}

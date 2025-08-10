@@ -1,0 +1,41 @@
+meta {
+  name: Invalid Tool Name
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/messages/?session_id={{sessionId}}
+  body: json
+  auth: inherit
+}
+
+params:query {
+  session_id: {{sessionId}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "jsonrpc": "2.0",
+    "id": 12,
+    "method": "tools/call",
+    "params": {
+      "name": "nonexistent_tool",
+      "arguments": {
+        "query": "index=main"
+      }
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Test error handling with invalid tool name
+}

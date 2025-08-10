@@ -1,0 +1,45 @@
+meta {
+  name: Search with Custom Timeout
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/messages/?session_id={{sessionId}}
+  body: json
+  auth: inherit
+}
+
+params:query {
+  session_id: {{sessionId}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "jsonrpc": "2.0",
+    "id": 9,
+    "method": "tools/call",
+    "params": {
+      "name": "splunk_search",
+      "arguments": {
+        "query": "index=kubernetes | head 3 | table _time, host, source",
+        "earliest_time": "-1h",
+        "latest_time": "now",
+        "max_results": 3,
+        "timeout": 60
+      }
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Search with custom timeout and table formatting
+}

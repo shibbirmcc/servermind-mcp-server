@@ -1,0 +1,36 @@
+meta {
+  name: List Tools
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/messages/?session_id={{sessionId}}
+  body: json
+  auth: inherit
+}
+
+params:query {
+  session_id: {{sessionId}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tools/list",
+    "params": {}
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  List available tools (should return splunk_search)
+}

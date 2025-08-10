@@ -1,0 +1,44 @@
+meta {
+  name: Search with Eval and Where
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/messages/?session_id={{sessionId}}
+  body: json
+  auth: inherit
+}
+
+params:query {
+  session_id: {{sessionId}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "jsonrpc": "2.0",
+    "id": 14,
+    "method": "tools/call",
+    "params": {
+      "name": "splunk_search",
+      "arguments": {
+        "query": "index=kubernetes | eval hour=strftime(_time, \"%H\") | where hour >= 12 | stats count by hour | sort hour",
+        "earliest_time": "-24h",
+        "latest_time": "now",
+        "max_results": 24
+      }
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Search with eval and where clauses for time-based filtering
+}

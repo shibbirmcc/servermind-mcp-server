@@ -1,0 +1,44 @@
+meta {
+  name: Search Kubernetes Index
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/messages/?session_id={{sessionId}}
+  body: json
+  auth: inherit
+}
+
+params:query {
+  session_id: {{sessionId}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "jsonrpc": "2.0",
+    "id": 5,
+    "method": "tools/call",
+    "params": {
+      "name": "splunk_search",
+      "arguments": {
+        "query": "index=kubernetes",
+        "earliest_time": "-24h",
+        "latest_time": "now",
+        "max_results": 5
+      }
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Search kubernetes index with recent data
+}

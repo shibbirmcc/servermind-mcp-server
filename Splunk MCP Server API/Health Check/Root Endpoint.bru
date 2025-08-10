@@ -1,0 +1,19 @@
+meta {
+  name: Root Endpoint
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Test the root endpoint - should return 200 OK
+}

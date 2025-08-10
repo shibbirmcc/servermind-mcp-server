@@ -1,0 +1,44 @@
+meta {
+  name: Timechart Query
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/messages/?session_id={{sessionId}}
+  body: json
+  auth: inherit
+}
+
+params:query {
+  session_id: {{sessionId}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "jsonrpc": "2.0",
+    "id": 7,
+    "method": "tools/call",
+    "params": {
+      "name": "splunk_search",
+      "arguments": {
+        "query": "index=kubernetes | timechart span=1h count",
+        "earliest_time": "-24h",
+        "latest_time": "now",
+        "max_results": 50
+      }
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Time-based analysis with hourly buckets
+}

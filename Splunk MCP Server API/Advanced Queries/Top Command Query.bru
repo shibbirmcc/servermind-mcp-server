@@ -1,0 +1,44 @@
+meta {
+  name: Top Command Query
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/messages/?session_id={{sessionId}}
+  body: json
+  auth: inherit
+}
+
+params:query {
+  session_id: {{sessionId}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "jsonrpc": "2.0",
+    "id": 15,
+    "method": "tools/call",
+    "params": {
+      "name": "splunk_search",
+      "arguments": {
+        "query": "index=kubernetes | top limit=10 sourcetype",
+        "earliest_time": "-24h",
+        "latest_time": "now",
+        "max_results": 10
+      }
+    }
+  }
+}
+
+settings {
+  encodeUrl: true
+}
+
+docs {
+  Find top sourcetypes in kubernetes index
+}

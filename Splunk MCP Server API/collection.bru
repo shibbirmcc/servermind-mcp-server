@@ -1,0 +1,54 @@
+meta {
+  name: Splunk MCP Server API
+}
+
+auth {
+  mode: none
+}
+
+vars:pre-request {
+  baseUrl: http://localhost:8756
+  sessionId: {{$randomUUID}}
+}
+
+script:pre-request {
+  // Generate a new session ID for each request if not already set
+  if (!bru.getVar('sessionId')) {
+      bru.setVar('sessionId', bru.interpolate('{{$randomUUID}}'));
+  }
+}
+
+script:post-response {
+  // Basic response validation
+  test('Status code is 200 or 202', function () {
+      expect(res.getStatus()).to.be.oneOf([200, 202, 307]);
+  });
+  
+  // Check if response is JSON for MCP protocol requests
+  if (req.getUrl().path.includes('messages')) {
+      test('Response is JSON', function () {
+          expect(res.getHeader('Content-Type')).to.include('application/json');
+      });
+      
+      // Parse and validate JSON-RPC response structure
+      if (res.getStatus() === 202) {
+          try {
+              const jsonData = res.getBody();
+              test('Valid JSON-RPC response', function () {
+                  expect(jsonData).to.have.property('jsonrpc');
+                  expect(jsonData.jsonrpc).to.eql('2.0');
+              });
+          } catch (e) {
+              console.log('Response is not JSON or parsing failed:', e);
+          }
+      }
+  }
+  
+  // Log response for debugging
+  console.log('Response Status:', res.getStatus());
+  console.log('Response Body:', JSON.stringify(res.getBody()));
+}
+
+docs {
+  Postman collection for testing the Splunk MCP Server with SSE transport and FastMCP pattern
+}
