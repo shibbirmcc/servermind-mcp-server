@@ -22,7 +22,7 @@ from src.tools.indexes import get_indexes_tool
 from src.tools.export import get_export_tool
 from src.tools.monitor import get_monitor_tool
 from src.tools.jira import (
-    execute_jira_search, execute_jira_projects, execute_jira_issue
+    execute_jira_search, execute_jira_projects, execute_jira_create_issue, execute_jira_issue
 )
 from src.tools.github import (
     execute_github_repositories, execute_github_repository, 
@@ -288,6 +288,54 @@ if config.jira is not None:
             return f"Error getting JIRA projects: {str(e)}"
 
     @mcp.tool()
+    async def jira_create_issue(
+        project_key: str,
+        summary: str,
+        description: str,
+        issue_type: str = "Bug",
+        priority: str = "Medium",
+        assignee: str = None,
+        labels: List[str] = None,
+        context: Context = None
+    ) -> str:
+        """Create a new JIRA issue from error analysis or problem report.
+        
+        Args:
+            project_key: JIRA project key where the issue should be created (e.g., 'PROJ', 'DEV')
+            summary: Brief summary of the issue or error
+            description: Detailed description of the error, analysis, and steps to reproduce
+            issue_type: Type of issue to create ('Bug', 'Task', 'Story', 'Epic', 'Incident')
+            priority: Priority level ('Highest', 'High', 'Medium', 'Low', 'Lowest')
+            assignee: Username to assign the issue to (optional)
+            labels: Labels to add to the issue (e.g., ['error-analysis', 'splunk', 'urgent'])
+        
+        Returns:
+            Created JIRA issue details with direct link
+        """
+        try:
+            arguments = {
+                "project_key": project_key,
+                "summary": summary,
+                "description": description,
+                "issue_type": issue_type,
+                "priority": priority
+            }
+            if assignee is not None:
+                arguments["assignee"] = assignee
+            if labels is not None:
+                arguments["labels"] = labels
+            
+            results = await execute_jira_create_issue(arguments)
+            
+            if results and len(results) > 0:
+                return results[0].text
+            else:
+                return "Failed to create JIRA issue"
+                
+        except Exception as e:
+            return f"Error creating JIRA issue: {str(e)}"
+
+    @mcp.tool()
     async def jira_issue(
         issue_key: str,
         fields: List[str] = None,
@@ -503,6 +551,7 @@ def main():
         print("  JIRA Tools:")
         print(f"    - jira_search: Search JIRA issues using JQL")
         print(f"    - jira_projects: List available JIRA projects")
+        print(f"    - jira_create_issue: Create new JIRA issues from error analysis")
         print(f"    - jira_issue: Get detailed JIRA issue information")
     else:
         print("  JIRA Tools: Not configured (set JIRA_BASE_URL, JIRA_USERNAME, JIRA_API_TOKEN)")

@@ -339,6 +339,188 @@ class JiraProjectsTool:
         return [TextContent(type="text", text=formatted_results)]
 
 
+class JiraCreateIssueTool:
+    """MCP tool for creating JIRA issues from error analysis."""
+    
+    def __init__(self):
+        """Initialize the JIRA create issue tool."""
+        self.config = get_config()
+        self._client: Optional[JiraClient] = None
+    
+    def get_client(self) -> Optional[JiraClient]:
+        """Get or create JIRA client instance."""
+        if self.config.jira is None:
+            return None
+        
+        if self._client is None:
+            self._client = JiraClient(self.config.jira)
+        return self._client
+    
+    def get_tool_definition(self) -> Tool:
+        """Get the MCP tool definition for jira_create_issue."""
+        return Tool(
+            name="jira_create_issue",
+            description="Create a new JIRA issue from error analysis or problem report",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_key": {
+                        "type": "string",
+                        "description": "JIRA project key where the issue should be created (e.g., 'PROJ', 'DEV')"
+                    },
+                    "summary": {
+                        "type": "string",
+                        "description": "Brief summary of the issue or error"
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Detailed description of the error, analysis, and steps to reproduce"
+                    },
+                    "issue_type": {
+                        "type": "string",
+                        "description": "Type of issue to create",
+                        "enum": ["Bug", "Task", "Story", "Epic", "Incident"],
+                        "default": "Bug"
+                    },
+                    "priority": {
+                        "type": "string",
+                        "description": "Priority level for the issue",
+                        "enum": ["Highest", "High", "Medium", "Low", "Lowest"],
+                        "default": "Medium"
+                    },
+                    "assignee": {
+                        "type": "string",
+                        "description": "Username to assign the issue to (optional)"
+                    },
+                    "labels": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Labels to add to the issue (e.g., ['error-analysis', 'splunk', 'urgent'])"
+                    }
+                },
+                "required": ["project_key", "summary", "description"]
+            }
+        )
+    
+    async def execute(self, arguments: Dict[str, Any]) -> List[TextContent]:
+        """Execute the jira_create_issue tool."""
+        try:
+            client = self.get_client()
+            if client is None:
+                return [TextContent(
+                    type="text",
+                    text="❌ **JIRA Not Configured**\n\n"
+                         "JIRA integration is not configured. Please set the following environment variables:\n"
+                         "- JIRA_BASE_URL\n"
+                         "- JIRA_USERNAME\n"
+                         "- JIRA_API_TOKEN"
+                )]
+            
+            # Extract arguments
+            project_key = arguments.get("project_key")
+            summary = arguments.get("summary")
+            description = arguments.get("description")
+            
+            if not project_key:
+                raise ValueError("Project key parameter is required")
+            if not summary:
+                raise ValueError("Summary parameter is required")
+            if not description:
+                raise ValueError("Description parameter is required")
+            
+            issue_type = arguments.get("issue_type", "Bug")
+            priority = arguments.get("priority", "Medium")
+            assignee = arguments.get("assignee")
+            labels = arguments.get("labels", [])
+            
+            logger.info("Creating JIRA issue", project=project_key, summary=summary, issue_type=issue_type)
+            
+            # Prepare additional fields
+            additional_fields = {}
+            
+            if priority:
+                additional_fields['priority'] = {'name': priority}
+            
+            if assignee:
+                additional_fields['assignee'] = {'name': assignee}
+            
+            if labels:
+                additional_fields['labels'] = labels
+            
+            # Create the issue
+            issue = client.create_issue(
+                project_key=project_key,
+                summary=summary,
+                description=description,
+                issue_type=issue_type,
+                **additional_fields
+            )
+            
+            # Format results for MCP response
+            return self._format_create_results(issue, project_key, summary)
+            
+        except JiraConnectionError as e:
+            logger.error("JIRA connection error", error=str(e))
+            return [TextContent(
+                type="text",
+                text=f"❌ **JIRA Connection Error**\n\n"
+                     f"Failed to connect to JIRA: {e}\n\n"
+                     f"Please check your JIRA configuration and ensure the server is accessible."
+            )]
+        
+        except JiraAuthenticationError as e:
+            logger.error("JIRA authentication error", error=str(e))
+            return [TextContent(
+                type="text",
+                text=f"❌ **JIRA Authentication Error**\n\n"
+                     f"Authentication failed: {e}\n\n"
+                     f"Please check your JIRA credentials (username and API token)."
+            )]
+        
+        except JiraOperationError as e:
+            logger.error("JIRA operation error", error=str(e))
+            return [TextContent(
+                type="text",
+                text=f"❌ **JIRA Operation Error**\n\n"
+                     f"Failed to create issue: {e}\n\n"
+                     f"Please check the project key exists and you have permission to create issues."
+            )]
+        
+        except ValueError as e:
+            logger.error("Invalid arguments", error=str(e))
+            return [TextContent(
+                type="text",
+                text=f"❌ **Invalid Arguments**\n\n"
+                     f"Error: {e}\n\n"
+                     f"Please provide valid issue creation parameters."
+            )]
+        
+        except Exception as e:
+            logger.error("Unexpected error in JIRA create issue tool", error=str(e))
+            return [TextContent(
+                type="text",
+                text=f"❌ **Unexpected Error**\n\n"
+                     f"An unexpected error occurred: {e}\n\n"
+                     f"Please try again or contact support if the issue persists."
+            )]
+    
+    def _format_create_results(self, issue: Dict[str, Any], project_key: str, summary: str) -> List[TextContent]:
+        """Format issue creation results for MCP response."""
+        formatted_results = f"✅ **JIRA Issue Created Successfully**\n\n"
+        formatted_results += f"**Issue Key:** [{issue['key']}]({issue['url']})\n"
+        formatted_results += f"**Project:** {project_key}\n"
+        formatted_results += f"**Summary:** {summary}\n\n"
+        formatted_results += f"**Direct Link:** {issue['url']}\n\n"
+        formatted_results += f"**Next Steps:**\n"
+        formatted_results += f"- Click the link above to view the issue in JIRA\n"
+        formatted_results += f"- Add any additional details or attachments as needed\n"
+        formatted_results += f"- Assign to appropriate team member if not already assigned\n"
+        formatted_results += f"- Set appropriate priority and labels based on urgency\n\n"
+        formatted_results += f"**💡 Tip:** You can reference this issue key `{issue['key']}` in future communications."
+        
+        return [TextContent(type="text", text=formatted_results)]
+
+
 class JiraIssueTool:
     """MCP tool for getting specific JIRA issue details."""
     
@@ -472,6 +654,7 @@ class JiraIssueTool:
 # Global tool instances
 _search_tool = JiraSearchTool()
 _projects_tool = JiraProjectsTool()
+_create_issue_tool = JiraCreateIssueTool()
 _issue_tool = JiraIssueTool()
 
 
@@ -483,6 +666,11 @@ def get_jira_search_tool() -> JiraSearchTool:
 def get_jira_projects_tool() -> JiraProjectsTool:
     """Get the global JIRA projects tool instance."""
     return _projects_tool
+
+
+def get_jira_create_issue_tool() -> JiraCreateIssueTool:
+    """Get the global JIRA create issue tool instance."""
+    return _create_issue_tool
 
 
 def get_jira_issue_tool() -> JiraIssueTool:
@@ -499,6 +687,7 @@ def get_jira_tools() -> List[Tool]:
     return [
         _search_tool.get_tool_definition(),
         _projects_tool.get_tool_definition(),
+        _create_issue_tool.get_tool_definition(),
         _issue_tool.get_tool_definition()
     ]
 
@@ -511,6 +700,11 @@ async def execute_jira_search(arguments: Dict[str, Any]) -> List[TextContent]:
 async def execute_jira_projects(arguments: Dict[str, Any]) -> List[TextContent]:
     """Execute the jira_projects tool."""
     return await _projects_tool.execute(arguments)
+
+
+async def execute_jira_create_issue(arguments: Dict[str, Any]) -> List[TextContent]:
+    """Execute the jira_create_issue tool."""
+    return await _create_issue_tool.execute(arguments)
 
 
 async def execute_jira_issue(arguments: Dict[str, Any]) -> List[TextContent]:
