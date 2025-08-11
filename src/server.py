@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 MCP server with SSE transport exposing Splunk tools and automated issue creation
+MCP server with SSE transport exposing Splunk, JIRA, and GitHub tools
 Following the working FastMCP pattern
 """
 
@@ -38,6 +39,18 @@ from src.tools.analyze_traces_narrative import get_analyze_traces_narrative_tool
 from src.tools.group_error_logs_prompt import get_tool_definition as get_group_error_logs_tool, execute as execute_group_error_logs
 from src.tools.extract_trace_ids_for_search import get_tool_definition as get_extract_trace_ids_tool, execute as execute_extract_trace_ids
 from src.tools.ticket_split_prepare import get_tool_definition as get_ticket_split_prepare_tool
+from src.tools.jira import (
+    execute_jira_search, execute_jira_projects, execute_jira_issue
+)
+from src.tools.github import (
+    execute_github_repositories, execute_github_repository,
+    execute_github_issues, execute_github_pull_requests
+)
+from src.config import get_config
+
+# Get configuration to determine server name
+config = get_config()
+server_name = config.mcp.server_name
 
 # Create FastMCP instance
 mcp = FastMCP(server_name)
@@ -322,9 +335,9 @@ async def splunk_trace_search_by_ids(
     additional_fields: List[str] = None,
     context: Context = None
 ) -> str:
-    """Search Splunk for traces by specific trace IDs. 
-    
-    This tool allows you to find all log entries associated with one or more trace IDs 
+    """Search Splunk for traces by specific trace IDs.
+
+    This tool allows you to find all log entries associated with one or more trace IDs
     across specified indexes or all available indexes.
     """
     try:
@@ -336,17 +349,17 @@ async def splunk_trace_search_by_ids(
             "latest_time": latest_time,
             "max_results": max_results
         }
-        
+
         if indexes is not None:
             arguments["indices"] = indexes  # Note: "indices" not "indexes"
-        
+
         results = await trace_search_tool.execute(arguments)
-        
+
         if results and len(results) > 0:
             return results[0].text
         else:
             return "No results returned from trace search"
-            
+
     except Exception as e:
         return f"Error executing trace search: {str(e)}"
 
@@ -358,8 +371,8 @@ async def splunk_error_search(
     max_results: int = 500,
     context: Context = None
 ) -> str:
-    """Search Splunk for logs containing 'ERROR' or 'error' in one or more indices. 
-    If no earliest_time is provided, automatically broadens search up to 3 days. 
+    """Search Splunk for logs containing 'ERROR' or 'error' in one or more indices.
+    If no earliest_time is provided, automatically broadens search up to 3 days.
     If still no results, returns a detailed no-results summary."""
     try:
         arguments = {
@@ -367,17 +380,17 @@ async def splunk_error_search(
             "latest_time": latest_time,
             "max_results": max_results
         }
-        
+
         if earliest_time is not None:
             arguments["earliest_time"] = earliest_time
-        
+
         results = await execute_splunk_error_search(arguments)
-        
+
         if results and len(results) > 0:
             return results[0].text
         else:
             return "No results returned from error search"
-            
+
     except Exception as e:
         return f"Error executing error search: {str(e)}"
 
@@ -400,14 +413,14 @@ async def error_logs(
             "max_results": max_results,
             "group_by": group_by
         }
-        
+
         results = await error_logs_tool.execute(arguments)
-        
+
         if results and len(results) > 0:
             return results[0].text
         else:
             return "No results returned from error logs processing"
-            
+
     except Exception as e:
         return f"Error processing error logs: {str(e)}"
 
@@ -445,7 +458,7 @@ async def analyze_traces_narrative(
             "mode": mode,
             "verbosity": verbosity
         }
-        
+
         if traces is not None:
             arguments["traces"] = traces
         if events is not None:
@@ -454,14 +467,14 @@ async def analyze_traces_narrative(
             arguments["id"] = id
         if kind is not None:
             arguments["kind"] = kind
-        
+
         results = await analyze_tool.execute(arguments)
-        
+
         if results and len(results) > 0:
             return results[0].text
         else:
             return "No results returned from trace analysis"
-            
+
     except Exception as e:
         return f"Error analyzing traces: {str(e)}"
 
@@ -471,26 +484,26 @@ async def logs_debug_entry(
     **kwargs
 ) -> str:
     """🚀 PRIMARY ENTRY POINT for debugging issues like 'something is wrong in staging'.
-    
+
     This is the recommended starting point for any general debugging scenario. It automatically
-    guides you through the complete debugging workflow: discovering indexes → finding errors → 
+    guides you through the complete debugging workflow: discovering indexes → finding errors →
     analyzing traces → identifying root causes → creating tickets.
-    
+
     Use this when you have general issues like:
     - 'Something is wrong in staging'
-    - 'Users are reporting errors'  
+    - 'Users are reporting errors'
     - 'Service seems to be failing'
     - Any debugging scenario where you need to investigate problems
     """
     try:
         logs_debug_tool = get_logs_debug_entry_tool()
         results = await logs_debug_tool.execute(kwargs)
-        
+
         if results and len(results) > 0:
             return results[0].text
         else:
             return "No results returned from logs debug entry"
-            
+
     except Exception as e:
         return f"Error in logs debug entry: {str(e)}"
 
@@ -501,11 +514,11 @@ async def group_error_logs(
     context: Context = None
 ) -> str:
     """Group ERROR logs into semantic clusters and pick one representative trace/correlation ID per group.
-    
+
     Args:
         logs: Raw Splunk events (array of objects) from splunk_error_search
         max_groups: Soft cap for number of groups to aim for (model-level guidance)
-    
+
     Returns:
         Grouped error logs with representative IDs and plan for next step
     """
@@ -514,14 +527,14 @@ async def group_error_logs(
             "logs": logs,
             "max_groups": max_groups
         }
-        
+
         results = await execute_group_error_logs(arguments)
-        
+
         if results and len(results) > 0:
             return results[0].text
         else:
             return "No results returned from error log grouping"
-            
+
     except Exception as e:
         return f"Error grouping error logs: {str(e)}"
 
@@ -534,16 +547,16 @@ async def extract_trace_ids_for_search(
     max_results: int = 4000,
     context: Context = None
 ) -> str:
-    """Extract trace/correlation IDs from grouped error logs output and prepare 
+    """Extract trace/correlation IDs from grouped error logs output and prepare
     the next step to fetch full traces via splunk_trace_search_by_ids.
-    
+
     Args:
         grouped_logs: JSON string output from group_error_logs containing grouped error patterns with chosen_id values
         deduplicate: Whether to remove duplicate trace IDs (default: true)
         earliest_time: Start time for trace search (default: -24h)
         latest_time: End time for trace search (default: now)
         max_results: Maximum results per trace search (default: 4000)
-    
+
     Returns:
         Plan to call splunk_trace_search_by_ids with extracted trace IDs
     """
@@ -555,14 +568,14 @@ async def extract_trace_ids_for_search(
             "latest_time": latest_time,
             "max_results": max_results
         }
-        
+
         results = await execute_extract_trace_ids(arguments)
-        
+
         if results and len(results) > 0:
             return results[0].text
         else:
             return "No results returned from trace ID extraction"
-            
+
     except Exception as e:
         return f"Error extracting trace IDs: {str(e)}"
 
@@ -574,12 +587,12 @@ async def root_cause_identification_prompt(
     context: Context = None
 ) -> str:
     """Confirm service-level root causes based on narrative analysis and prepare for ticket creation.
-    
+
     Args:
         analysis: Structured analysis object from analyze_traces_narrative
         mode: Analysis mode - 'auto', 'strict', or 'exploratory' (default: 'auto')
         confidence_floor: Minimum confidence to keep a hypothesis (0.0-1.0, default: 0.6)
-    
+
     Returns:
         Root cause analysis results and plan for ticket preparation
     """
@@ -590,14 +603,14 @@ async def root_cause_identification_prompt(
             "mode": mode,
             "confidence_floor": confidence_floor
         }
-        
+
         results = await root_cause_tool.execute(arguments)
-        
+
         if results and len(results) > 0:
             return results[0].text
         else:
             return "No results returned from root cause identification"
-            
+
     except Exception as e:
         return f"Error in root cause identification: {str(e)}"
 
@@ -610,13 +623,13 @@ async def ticket_split_prepare(
     context: Context = None
 ) -> str:
     """Create ticket-ready items by combining cross-service analysis with per-service root causes.
-    
+
     Args:
         analysis: Structured analysis from analyze_traces_narrative
         root_cause: Structured root-cause output from root_cause_identification_prompt
         title_prefix: Optional prefix for generated ticket titles (e.g., team or incident tag)
         mode: Processing mode - 'auto' or 'strict' (affects how aggressively subs are created)
-    
+
     Returns:
         JSON list of ticket items (main and sub tickets) and plan for automated issue creation
     """
@@ -628,14 +641,14 @@ async def ticket_split_prepare(
             "title_prefix": title_prefix,
             "mode": mode
         }
-        
+
         results = await ticket_tool.execute(arguments)
-        
+
         if results and len(results) > 0:
             return results[0].text
         else:
             return "No results returned from ticket split preparation"
-            
+
     except Exception as e:
         return f"Error in ticket split preparation: {str(e)}"
 
@@ -650,12 +663,12 @@ async def issue_reader(
     context: Context = None
 ) -> str:
     """Read GitHub or JIRA issues using CLI (preferred) or MCP servers (fallback).
-    
+
     This tool reads issue details from GitHub or JIRA using multiple methods:
     1. CLI tools (gh for GitHub, jira for JIRA) - preferred method
     2. MCP servers (GitHub/Atlassian MCP servers) - fallback method
     3. Setup instructions if both methods fail
-    
+
     Args:
         issue_reference: Direct issue reference (e.g., 'owner/repo#123' for GitHub, 'PROJECT-456' for JIRA)
         platform: Explicit platform selection ('github', 'jira', or 'auto' for intelligent detection)
@@ -663,7 +676,7 @@ async def issue_reader(
         github_repo: GitHub repository in format 'owner/repo' (if not in issue_reference)
         jira_project: JIRA project key (if not in issue_reference)
         issue_number: Issue number/key (if not in issue_reference)
-    
+
     Returns:
         Detailed issue information including title, description, status, comments, and metadata
     """
@@ -672,7 +685,7 @@ async def issue_reader(
         arguments = {
             "platform": platform
         }
-        
+
         if issue_reference is not None:
             arguments["issue_reference"] = issue_reference
         if previous_output is not None:
@@ -683,14 +696,14 @@ async def issue_reader(
             arguments["jira_project"] = jira_project
         if issue_number is not None:
             arguments["issue_number"] = issue_number
-        
+
         results = await issue_reader_tool.execute(arguments)
-        
+
         if results and len(results) > 0:
             return results[0].text
         else:
             return "No results returned from issue reader"
-            
+
     except Exception as e:
         return f"Error reading issue: {str(e)}"
 
@@ -706,10 +719,10 @@ async def test_reproduction(
     context: Context = None
 ) -> str:
     """Generate comprehensive tests from issue reader output.
-    
+
     Creates unit tests, integration tests, and reproduction tests for each ticket.
     Supports service discovery from local filesystem or git repositories.
-    
+
     Args:
         issue_reader_output: JSON output from issue_reader containing multiple tickets with descriptions and analysis
         test_types: Types of tests to generate (unit, integration, reproduction, regression)
@@ -718,7 +731,7 @@ async def test_reproduction(
         git_repositories: Git repository URLs to search for services
         test_framework: Preferred testing framework (pytest, unittest, jest, junit, auto)
         output_directory: Directory to output generated tests
-    
+
     Returns:
         Comprehensive test reproduction results with generated test files and instructions
     """
@@ -728,7 +741,7 @@ async def test_reproduction(
             "issue_reader_output": issue_reader_output,
             "output_directory": output_directory
         }
-        
+
         if test_types is not None:
             arguments["test_types"] = test_types
         if service_discovery_mode != "both":
@@ -739,14 +752,14 @@ async def test_reproduction(
             arguments["git_repositories"] = git_repositories
         if test_framework != "auto":
             arguments["test_framework"] = test_framework
-        
+
         results = await test_reproduction_tool.execute(arguments)
-        
+
         if results and len(results) > 0:
             return results[0].text
         else:
             return "No results returned from test reproduction"
-            
+
     except Exception as e:
         return f"Error in test reproduction: {str(e)}"
 
@@ -762,10 +775,10 @@ async def bug_fix_executor(
     context: Context = None
 ) -> str:
     """Execute tests from test_reproduction and iteratively fix bugs until tests pass.
-    
+
     Takes test reproduction output and issue reader context to implement fixes.
     Runs tests, analyzes failures, generates fixes, applies them, and repeats until tests pass.
-    
+
     Args:
         test_reproduction_output: JSON output from test_reproduction containing test paths and ticket info
         issue_reader_output: JSON output from issue_reader containing ticket details and root cause analysis
@@ -774,7 +787,7 @@ async def bug_fix_executor(
         test_framework: Test framework to use - pytest, jest, junit, auto (default: auto)
         fix_strategy: How aggressively to apply fixes - conservative, aggressive, auto (default: auto)
         backup_code: Whether to backup original code before fixing (default: True)
-    
+
     Returns:
         Comprehensive bug fix execution report with iteration details and results
     """
@@ -788,17 +801,17 @@ async def bug_fix_executor(
             "fix_strategy": fix_strategy,
             "backup_code": backup_code
         }
-        
+
         if service_paths is not None:
             arguments["service_paths"] = service_paths
-        
+
         results = await bug_fix_tool.execute(arguments)
-        
+
         if results and len(results) > 0:
             return results[0].text
         else:
             return "No results returned from bug fix executor"
-            
+
     except Exception as e:
         return f"Error in bug fix executor: {str(e)}"
 
@@ -857,7 +870,14 @@ def main():
     print(f"    - splunk_monitor: Set up continuous monitoring (for ongoing surveillance of specific queries)")
     print(f"    - splunk_trace_search_by_ids: Search by known trace IDs (when you have specific trace identifiers)")
     print(f"    - error_logs: Process pre-retrieved log data (for analyzing logs already collected)")
-    
+
+    # Splunk tools (always available)
+    print("  Splunk Tools:")
+    print(f"    - splunk_search: Execute Splunk search queries")
+    print(f"    - splunk_indexes: List available Splunk indexes")
+    print(f"    - splunk_export: Export Splunk search results to various formats")
+    print(f"    - splunk_monitor: Start continuous monitoring of Splunk logs")
+
     print("  Analysis & Workflow Tools:")
     print(f"    - logs_debug_entry: 🚀 START HERE for general debugging (e.g., 'something is wrong in staging')")
     print(f"    - group_error_logs: Group ERROR logs into semantic clusters")
@@ -865,7 +885,7 @@ def main():
     print(f"    - analyze_traces_narrative: Generate narrative analysis with cross-service story")
     print(f"    - root_cause_identification_prompt: Confirm service-level root causes")
     print(f"    - ticket_split_prepare: Create ticket-ready items from analysis")
-    
+
     # Automated Issue Creation tool (always available - uses external MCP servers)
     print("  Issue Management & Testing:")
     print(f"    - automated_issue_creation: Analyze Splunk errors and create issues via external MCP servers")
@@ -876,6 +896,25 @@ def main():
     print(f"      Note: Creates unit, integration, and reproduction tests for tickets")
     print(f"    - bug_fix_executor: Execute tests and iteratively fix bugs until tests pass")
     print(f"      Note: Runs tests, analyzes failures, generates fixes, and applies them iteratively")
+
+    # JIRA tools (if configured)
+    if config.jira is not None:
+        print("  JIRA Tools:")
+        print(f"    - jira_search: Search JIRA issues using JQL")
+        print(f"    - jira_projects: List available JIRA projects")
+        print(f"    - jira_issue: Get detailed JIRA issue information")
+    else:
+        print("  JIRA Tools: Not configured (set JIRA_BASE_URL, JIRA_USERNAME, JIRA_API_TOKEN)")
+
+    # GitHub tools (if configured)
+    if config.github is not None:
+        print("  GitHub Tools:")
+        print(f"    - github_repositories: List GitHub repositories")
+        print(f"    - github_repository: Get detailed repository information")
+        print(f"    - github_issues: Get repository issues")
+        print(f"    - github_pull_requests: Get repository pull requests")
+    else:
+        print("  GitHub Tools: Not configured (set GITHUB_TOKEN)")
 
     uvicorn.run(starlette_app, host="0.0.0.0", port=port)
 
