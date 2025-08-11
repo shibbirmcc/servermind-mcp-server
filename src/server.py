@@ -26,7 +26,7 @@ from src.tools.jira import (
 )
 from src.tools.github import (
     execute_github_repositories, execute_github_repository, 
-    execute_github_issues, execute_github_pull_requests
+    execute_github_issues, execute_github_create_issue, execute_github_pull_requests
 )
 from src.config import get_config
 
@@ -464,6 +464,48 @@ if config.github is not None:
             return f"Error getting GitHub issues: {str(e)}"
 
     @mcp.tool()
+    async def github_create_issue(
+        repo_name: str,
+        title: str,
+        body: str,
+        labels: List[str] = None,
+        assignees: List[str] = None,
+        context: Context = None
+    ) -> str:
+        """Create a new GitHub issue from error analysis or problem report.
+        
+        Args:
+            repo_name: Repository name in format 'owner/repo' (e.g., 'octocat/Hello-World')
+            title: Brief title of the issue or error
+            body: Detailed description of the error, analysis, and steps to reproduce
+            labels: Labels to add to the issue (e.g., ['bug', 'error-analysis', 'splunk', 'urgent'])
+            assignees: Usernames to assign the issue to (e.g., ['username1', 'username2'])
+        
+        Returns:
+            Created GitHub issue details with direct link
+        """
+        try:
+            arguments = {
+                "repo_name": repo_name,
+                "title": title,
+                "body": body
+            }
+            if labels is not None:
+                arguments["labels"] = labels
+            if assignees is not None:
+                arguments["assignees"] = assignees
+            
+            results = await execute_github_create_issue(arguments)
+            
+            if results and len(results) > 0:
+                return results[0].text
+            else:
+                return "Failed to create GitHub issue"
+                
+        except Exception as e:
+            return f"Error creating GitHub issue: {str(e)}"
+
+    @mcp.tool()
     async def github_pull_requests(
         repo_name: str,
         state: str = "open",
@@ -549,10 +591,8 @@ def main():
     # JIRA tools (if configured)
     if config.jira is not None:
         print("  JIRA Tools:")
-        print(f"    - jira_search: Search JIRA issues using JQL")
         print(f"    - jira_projects: List available JIRA projects")
         print(f"    - jira_create_issue: Create new JIRA issues from error analysis")
-        print(f"    - jira_issue: Get detailed JIRA issue information")
     else:
         print("  JIRA Tools: Not configured (set JIRA_BASE_URL, JIRA_USERNAME, JIRA_API_TOKEN)")
     
@@ -560,9 +600,7 @@ def main():
     if config.github is not None:
         print("  GitHub Tools:")
         print(f"    - github_repositories: List GitHub repositories")
-        print(f"    - github_repository: Get detailed repository information")
-        print(f"    - github_issues: Get repository issues")
-        print(f"    - github_pull_requests: Get repository pull requests")
+        print(f"    - github_create_issue: Create new GitHub issues from error analysis")
     else:
         print("  GitHub Tools: Not configured (set GITHUB_TOKEN)")
     

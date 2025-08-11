@@ -519,8 +519,164 @@ class GitHubIssuesTool:
         return suggestions
 
 
+class GitHubCreateIssueTool:
+    """MCP tool for creating GitHub issues from error analysis."""
+    
+    def __init__(self):
+        """Initialize the GitHub create issue tool."""
+        self.config = get_config()
+        self._client: Optional[GitHubClient] = None
+    
+    def get_client(self) -> Optional[GitHubClient]:
+        """Get or create GitHub client instance."""
+        if self.config.github is None:
+            return None
+        
+        if self._client is None:
+            self._client = GitHubClient(self.config.github)
+        return self._client
+    
+    def get_tool_definition(self) -> Tool:
+        """Get the MCP tool definition for github_create_issue."""
+        return Tool(
+            name="github_create_issue",
+            description="Create a new GitHub issue from error analysis or problem report",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "repo_name": {
+                        "type": "string",
+                        "description": "Repository name in format 'owner/repo' (e.g., 'octocat/Hello-World')"
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Brief title of the issue or error"
+                    },
+                    "body": {
+                        "type": "string",
+                        "description": "Detailed description of the error, analysis, and steps to reproduce"
+                    },
+                    "labels": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Labels to add to the issue (e.g., ['bug', 'error-analysis', 'splunk', 'urgent'])"
+                    },
+                    "assignees": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Usernames to assign the issue to (e.g., ['username1', 'username2'])"
+                    }
+                },
+                "required": ["repo_name", "title", "body"]
+            }
+        )
+    
+    async def execute(self, arguments: Dict[str, Any]) -> List[TextContent]:
+        """Execute the github_create_issue tool."""
+        try:
+            client = self.get_client()
+            if client is None:
+                return [TextContent(
+                    type="text",
+                    text="❌ **GitHub Not Configured**\n\n"
+                         "GitHub integration is not configured. Please set the following environment variable:\n"
+                         "- GITHUB_TOKEN"
+                )]
+            
+            # Extract arguments
+            repo_name = arguments.get("repo_name")
+            title = arguments.get("title")
+            body = arguments.get("body")
+            
+            if not repo_name:
+                raise ValueError("Repository name parameter is required")
+            if not title:
+                raise ValueError("Title parameter is required")
+            if not body:
+                raise ValueError("Body parameter is required")
+            
+            labels = arguments.get("labels", [])
+            assignees = arguments.get("assignees", [])
+            
+            logger.info("Creating GitHub issue", repo=repo_name, title=title)
+            
+            # Create the issue
+            issue = client.create_issue(
+                repo_name=repo_name,
+                title=title,
+                body=body,
+                labels=labels if labels else None,
+                assignees=assignees if assignees else None
+            )
+            
+            # Format results for MCP response
+            return self._format_create_results(issue, repo_name, title)
+            
+        except GitHubConnectionError as e:
+            logger.error("GitHub connection error", error=str(e))
+            return [TextContent(
+                type="text",
+                text=f"❌ **GitHub Connection Error**\n\n"
+                     f"Failed to connect to GitHub: {e}\n\n"
+                     f"Please check your GitHub configuration and ensure the API is accessible."
+            )]
+        
+        except GitHubAuthenticationError as e:
+            logger.error("GitHub authentication error", error=str(e))
+            return [TextContent(
+                type="text",
+                text=f"❌ **GitHub Authentication Error**\n\n"
+                     f"Authentication failed: {e}\n\n"
+                     f"Please check your GitHub token and ensure it has the necessary permissions."
+            )]
+        
+        except GitHubOperationError as e:
+            logger.error("GitHub operation error", error=str(e))
+            return [TextContent(
+                type="text",
+                text=f"❌ **GitHub Operation Error**\n\n"
+                     f"Failed to create issue: {e}\n\n"
+                     f"Please check the repository name exists and you have permission to create issues."
+            )]
+        
+        except ValueError as e:
+            logger.error("Invalid arguments", error=str(e))
+            return [TextContent(
+                type="text",
+                text=f"❌ **Invalid Arguments**\n\n"
+                     f"Error: {e}\n\n"
+                     f"Please provide valid issue creation parameters."
+            )]
+        
+        except Exception as e:
+            logger.error("Unexpected error in GitHub create issue tool", error=str(e))
+            return [TextContent(
+                type="text",
+                text=f"❌ **Unexpected Error**\n\n"
+                     f"An unexpected error occurred: {e}\n\n"
+                     f"Please try again or contact support if the issue persists."
+            )]
+    
+    def _format_create_results(self, issue: Dict[str, Any], repo_name: str, title: str) -> List[TextContent]:
+        """Format issue creation results for MCP response."""
+        formatted_results = f"✅ **GitHub Issue Created Successfully**\n\n"
+        formatted_results += f"**Issue Number:** [#{issue['number']}]({issue['html_url']})\n"
+        formatted_results += f"**Repository:** {repo_name}\n"
+        formatted_results += f"**Title:** {title}\n\n"
+        formatted_results += f"**Direct Link:** {issue['html_url']}\n\n"
+        formatted_results += f"**Next Steps:**\n"
+        formatted_results += f"- Click the link above to view the issue on GitHub\n"
+        formatted_results += f"- Add any additional details, screenshots, or attachments as needed\n"
+        formatted_results += f"- Assign to appropriate team members if not already assigned\n"
+        formatted_results += f"- Add relevant labels and milestones based on priority\n"
+        formatted_results += f"- Link to related pull requests or other issues\n\n"
+        formatted_results += f"**💡 Tip:** You can reference this issue `#{issue['number']}` in commits and pull requests."
+        
+        return [TextContent(type="text", text=formatted_results)]
+
+
 class GitHubPullRequestsTool:
-    """MCP tool for getting GitHub pull requests from a repository."""
+    """MCP tool for getting GitHub pull requests."""
     
     def __init__(self):
         """Initialize the GitHub pull requests tool."""
@@ -711,6 +867,7 @@ class GitHubPullRequestsTool:
 _repositories_tool = GitHubRepositoriesTool()
 _repository_tool = GitHubRepositoryTool()
 _issues_tool = GitHubIssuesTool()
+_create_issue_tool = GitHubCreateIssueTool()
 _pull_requests_tool = GitHubPullRequestsTool()
 
 
@@ -729,6 +886,11 @@ def get_github_issues_tool() -> GitHubIssuesTool:
     return _issues_tool
 
 
+def get_github_create_issue_tool() -> GitHubCreateIssueTool:
+    """Get the global GitHub create issue tool instance."""
+    return _create_issue_tool
+
+
 def get_github_pull_requests_tool() -> GitHubPullRequestsTool:
     """Get the global GitHub pull requests tool instance."""
     return _pull_requests_tool
@@ -744,6 +906,7 @@ def get_github_tools() -> List[Tool]:
         _repositories_tool.get_tool_definition(),
         _repository_tool.get_tool_definition(),
         _issues_tool.get_tool_definition(),
+        _create_issue_tool.get_tool_definition(),
         _pull_requests_tool.get_tool_definition()
     ]
 
@@ -761,6 +924,11 @@ async def execute_github_repository(arguments: Dict[str, Any]) -> List[TextConte
 async def execute_github_issues(arguments: Dict[str, Any]) -> List[TextContent]:
     """Execute the github_issues tool."""
     return await _issues_tool.execute(arguments)
+
+
+async def execute_github_create_issue(arguments: Dict[str, Any]) -> List[TextContent]:
+    """Execute the github_create_issue tool."""
+    return await _create_issue_tool.execute(arguments)
 
 
 async def execute_github_pull_requests(arguments: Dict[str, Any]) -> List[TextContent]:
