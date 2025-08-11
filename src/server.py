@@ -591,7 +591,6 @@ def main():
     # JIRA tools (if configured)
     if config.jira is not None:
         print("  JIRA Tools:")
-        print(f"    - jira_projects: List available JIRA projects")
         print(f"    - jira_create_issue: Create new JIRA issues from error analysis")
     else:
         print("  JIRA Tools: Not configured (set JIRA_BASE_URL, JIRA_USERNAME, JIRA_API_TOKEN)")
@@ -599,7 +598,6 @@ def main():
     # GitHub tools (if configured)
     if config.github is not None:
         print("  GitHub Tools:")
-        print(f"    - github_repositories: List GitHub repositories")
         print(f"    - github_create_issue: Create new GitHub issues from error analysis")
     else:
         print("  GitHub Tools: Not configured (set GITHUB_TOKEN)")
