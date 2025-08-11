@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-MCP server with SSE transport exposing Splunk, JIRA, and GitHub tools
+MCP server with SSE transport exposing Splunk tools and automated issue creation
 Following the working FastMCP pattern
 """
 
@@ -21,13 +21,7 @@ from src.tools.search import get_search_tool
 from src.tools.indexes import get_indexes_tool
 from src.tools.export import get_export_tool
 from src.tools.monitor import get_monitor_tool
-from src.tools.jira import (
-    execute_jira_search, execute_jira_projects, execute_jira_create_issue, execute_jira_issue
-)
-from src.tools.github import (
-    execute_github_repositories, execute_github_repository, 
-    execute_github_issues, execute_github_create_issue, execute_github_pull_requests
-)
+from src.tools.automated_issue_creation import execute_automated_issue_creation
 from src.config import get_config
 
 # Get configuration to determine server name
@@ -235,305 +229,74 @@ async def splunk_monitor(
     except Exception as e:
         return f"Error executing monitor: {str(e)}"
 
-# JIRA Tools (only registered if JIRA is configured)
-if config.jira is not None:
+
+# Automated Issue Creation Tool (available if either GitHub or JIRA is configured)
+if config.github is not None or config.jira is not None:
     @mcp.tool()
-    async def jira_search(
-        jql: str,
-        max_results: int = 50,
-        fields: List[str] = None,
+    async def automated_issue_creation(
+        splunk_query: str,
+        platform: str = "github",
+        github_repo: str = None,
+        jira_project: str = None,
+        earliest_time: str = "-24h",
+        latest_time: str = "now",
+        max_results: int = 100,
+        severity_threshold: str = "medium",
+        group_similar_errors: bool = True,
+        auto_assign: str = None,
+        custom_labels: List[str] = None,
         context: Context = None
     ) -> str:
-        """Search for JIRA issues using JQL (JIRA Query Language).
+        """Automatically analyze Splunk errors and create GitHub or JIRA issues with detailed error analysis.
+        
+        This tool performs comprehensive error analysis on Splunk search results and automatically creates
+        well-formatted issues in GitHub or JIRA with detailed error information, recommendations, and context.
         
         Args:
-            jql: JQL query string (e.g., 'project = PROJ AND status = Open', 'assignee = currentUser()')
-            max_results: Maximum number of results to return (1-1000, default: 50)
-            fields: List of fields to include (e.g., ['key', 'summary', 'status', 'assignee'])
+            splunk_query: Splunk search query to find errors (e.g., 'index=main error | head 50')
+            platform: Platform to create issues on ('github', 'jira', or 'both')
+            github_repo: GitHub repository name in format 'owner/repo' (required if platform is 'github' or 'both')
+            jira_project: JIRA project key (required if platform is 'jira' or 'both')
+            earliest_time: Start time for Splunk search (default: '-24h')
+            latest_time: End time for Splunk search (default: 'now')
+            max_results: Maximum number of Splunk results to analyze (1-1000, default: 100)
+            severity_threshold: Minimum severity level to create issues for ('low', 'medium', 'high', 'critical')
+            group_similar_errors: Whether to group similar errors into single issues (default: True)
+            auto_assign: Username to automatically assign created issues to (optional)
+            custom_labels: Additional custom labels to add to created issues (optional)
         
         Returns:
-            Formatted JIRA search results with analysis suggestions
-        """
-        try:
-            arguments = {"jql": jql, "max_results": max_results}
-            if fields is not None:
-                arguments["fields"] = fields
-            
-            results = await execute_jira_search(arguments)
-            
-            if results and len(results) > 0:
-                return results[0].text
-            else:
-                return "No results returned from JIRA search"
-                
-        except Exception as e:
-            return f"Error executing JIRA search: {str(e)}"
-
-    @mcp.tool()
-    async def jira_projects(context: Context = None) -> str:
-        """Get list of available JIRA projects.
-        
-        Returns:
-            List of JIRA projects with details and usage examples
-        """
-        try:
-            results = await execute_jira_projects({})
-            
-            if results and len(results) > 0:
-                return results[0].text
-            else:
-                return "No projects found"
-                
-        except Exception as e:
-            return f"Error getting JIRA projects: {str(e)}"
-
-    @mcp.tool()
-    async def jira_create_issue(
-        project_key: str,
-        summary: str,
-        description: str,
-        issue_type: str = "Bug",
-        priority: str = "Medium",
-        assignee: str = None,
-        labels: List[str] = None,
-        context: Context = None
-    ) -> str:
-        """Create a new JIRA issue from error analysis or problem report.
-        
-        Args:
-            project_key: JIRA project key where the issue should be created (e.g., 'PROJ', 'DEV')
-            summary: Brief summary of the issue or error
-            description: Detailed description of the error, analysis, and steps to reproduce
-            issue_type: Type of issue to create ('Bug', 'Task', 'Story', 'Epic', 'Incident')
-            priority: Priority level ('Highest', 'High', 'Medium', 'Low', 'Lowest')
-            assignee: Username to assign the issue to (optional)
-            labels: Labels to add to the issue (e.g., ['error-analysis', 'splunk', 'urgent'])
-        
-        Returns:
-            Created JIRA issue details with direct link
+            Comprehensive analysis report with created issue details and error analysis
         """
         try:
             arguments = {
-                "project_key": project_key,
-                "summary": summary,
-                "description": description,
-                "issue_type": issue_type,
-                "priority": priority
+                "splunk_query": splunk_query,
+                "platform": platform,
+                "earliest_time": earliest_time,
+                "latest_time": latest_time,
+                "max_results": max_results,
+                "severity_threshold": severity_threshold,
+                "group_similar_errors": group_similar_errors
             }
-            if assignee is not None:
-                arguments["assignee"] = assignee
-            if labels is not None:
-                arguments["labels"] = labels
             
-            results = await execute_jira_create_issue(arguments)
+            if github_repo is not None:
+                arguments["github_repo"] = github_repo
+            if jira_project is not None:
+                arguments["jira_project"] = jira_project
+            if auto_assign is not None:
+                arguments["auto_assign"] = auto_assign
+            if custom_labels is not None:
+                arguments["custom_labels"] = custom_labels
             
-            if results and len(results) > 0:
-                return results[0].text
-            else:
-                return "Failed to create JIRA issue"
-                
-        except Exception as e:
-            return f"Error creating JIRA issue: {str(e)}"
-
-    @mcp.tool()
-    async def jira_issue(
-        issue_key: str,
-        fields: List[str] = None,
-        context: Context = None
-    ) -> str:
-        """Get detailed information about a specific JIRA issue.
-        
-        Args:
-            issue_key: JIRA issue key (e.g., 'PROJ-123', 'DEV-456')
-            fields: List of fields to include (optional)
-        
-        Returns:
-            Detailed JIRA issue information
-        """
-        try:
-            arguments = {"issue_key": issue_key}
-            if fields is not None:
-                arguments["fields"] = fields
-            
-            results = await execute_jira_issue(arguments)
+            results = await execute_automated_issue_creation(arguments)
             
             if results and len(results) > 0:
                 return results[0].text
             else:
-                return "No issue found"
+                return "Failed to execute automated issue creation"
                 
         except Exception as e:
-            return f"Error getting JIRA issue: {str(e)}"
-
-# GitHub Tools (only registered if GitHub is configured)
-if config.github is not None:
-    @mcp.tool()
-    async def github_repositories(
-        user_or_org: str = None,
-        repo_type: str = "all",
-        max_results: int = 30,
-        context: Context = None
-    ) -> str:
-        """Get list of GitHub repositories for a user or organization.
-        
-        Args:
-            user_or_org: Username or organization name (leave empty for authenticated user's repositories)
-            repo_type: Repository type filter ('all', 'owner', 'public', 'private', 'member')
-            max_results: Maximum number of results to return (1-100, default: 30)
-        
-        Returns:
-            List of GitHub repositories with statistics and usage suggestions
-        """
-        try:
-            arguments = {"repo_type": repo_type, "max_results": max_results}
-            if user_or_org is not None:
-                arguments["user_or_org"] = user_or_org
-            
-            results = await execute_github_repositories(arguments)
-            
-            if results and len(results) > 0:
-                return results[0].text
-            else:
-                return "No repositories found"
-                
-        except Exception as e:
-            return f"Error getting GitHub repositories: {str(e)}"
-
-    @mcp.tool()
-    async def github_repository(
-        repo_name: str,
-        context: Context = None
-    ) -> str:
-        """Get detailed information about a specific GitHub repository.
-        
-        Args:
-            repo_name: Repository name in format 'owner/repo' (e.g., 'octocat/Hello-World')
-        
-        Returns:
-            Detailed GitHub repository information
-        """
-        try:
-            arguments = {"repo_name": repo_name}
-            
-            results = await execute_github_repository(arguments)
-            
-            if results and len(results) > 0:
-                return results[0].text
-            else:
-                return "No repository found"
-                
-        except Exception as e:
-            return f"Error getting GitHub repository: {str(e)}"
-
-    @mcp.tool()
-    async def github_issues(
-        repo_name: str,
-        state: str = "open",
-        labels: List[str] = None,
-        assignee: str = None,
-        max_results: int = 30,
-        context: Context = None
-    ) -> str:
-        """Get issues from a GitHub repository.
-        
-        Args:
-            repo_name: Repository name in format 'owner/repo' (e.g., 'octocat/Hello-World')
-            state: Issue state filter ('open', 'closed', 'all')
-            labels: List of label names to filter by (e.g., ['bug', 'enhancement'])
-            assignee: Username to filter by assignee
-            max_results: Maximum number of results to return (1-100, default: 30)
-        
-        Returns:
-            List of GitHub issues with analysis
-        """
-        try:
-            arguments = {"repo_name": repo_name, "state": state, "max_results": max_results}
-            if labels is not None:
-                arguments["labels"] = labels
-            if assignee is not None:
-                arguments["assignee"] = assignee
-            
-            results = await execute_github_issues(arguments)
-            
-            if results and len(results) > 0:
-                return results[0].text
-            else:
-                return "No issues found"
-                
-        except Exception as e:
-            return f"Error getting GitHub issues: {str(e)}"
-
-    @mcp.tool()
-    async def github_create_issue(
-        repo_name: str,
-        title: str,
-        body: str,
-        labels: List[str] = None,
-        assignees: List[str] = None,
-        context: Context = None
-    ) -> str:
-        """Create a new GitHub issue from error analysis or problem report.
-        
-        Args:
-            repo_name: Repository name in format 'owner/repo' (e.g., 'octocat/Hello-World')
-            title: Brief title of the issue or error
-            body: Detailed description of the error, analysis, and steps to reproduce
-            labels: Labels to add to the issue (e.g., ['bug', 'error-analysis', 'splunk', 'urgent'])
-            assignees: Usernames to assign the issue to (e.g., ['username1', 'username2'])
-        
-        Returns:
-            Created GitHub issue details with direct link
-        """
-        try:
-            arguments = {
-                "repo_name": repo_name,
-                "title": title,
-                "body": body
-            }
-            if labels is not None:
-                arguments["labels"] = labels
-            if assignees is not None:
-                arguments["assignees"] = assignees
-            
-            results = await execute_github_create_issue(arguments)
-            
-            if results and len(results) > 0:
-                return results[0].text
-            else:
-                return "Failed to create GitHub issue"
-                
-        except Exception as e:
-            return f"Error creating GitHub issue: {str(e)}"
-
-    @mcp.tool()
-    async def github_pull_requests(
-        repo_name: str,
-        state: str = "open",
-        max_results: int = 30,
-        context: Context = None
-    ) -> str:
-        """Get pull requests from a GitHub repository.
-        
-        Args:
-            repo_name: Repository name in format 'owner/repo' (e.g., 'octocat/Hello-World')
-            state: Pull request state filter ('open', 'closed', 'all')
-            max_results: Maximum number of results to return (1-100, default: 30)
-        
-        Returns:
-            List of GitHub pull requests with analysis
-        """
-        try:
-            arguments = {"repo_name": repo_name, "state": state, "max_results": max_results}
-            
-            results = await execute_github_pull_requests(arguments)
-            
-            if results and len(results) > 0:
-                return results[0].text
-            else:
-                return "No pull requests found"
-                
-        except Exception as e:
-            return f"Error getting GitHub pull requests: {str(e)}"
+            return f"Error in automated issue creation: {str(e)}"
 
 def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlette:
     sse = SseServerTransport("/messages")
@@ -588,19 +351,12 @@ def main():
     print(f"    - splunk_export: Export Splunk search results to various formats")
     print(f"    - splunk_monitor: Start continuous monitoring of Splunk logs")
     
-    # JIRA tools (if configured)
-    if config.jira is not None:
-        print("  JIRA Tools:")
-        print(f"    - jira_create_issue: Create new JIRA issues from error analysis")
+    # Automated Issue Creation tool (if either GitHub or JIRA is configured)
+    if config.github is not None or config.jira is not None:
+        print("  Automated Analysis Tools:")
+        print(f"    - automated_issue_creation: Analyze Splunk errors and automatically create issues")
     else:
-        print("  JIRA Tools: Not configured (set JIRA_BASE_URL, JIRA_USERNAME, JIRA_API_TOKEN)")
-    
-    # GitHub tools (if configured)
-    if config.github is not None:
-        print("  GitHub Tools:")
-        print(f"    - github_create_issue: Create new GitHub issues from error analysis")
-    else:
-        print("  GitHub Tools: Not configured (set GITHUB_TOKEN)")
+        print("  Automated Analysis Tools: Not available (requires GitHub or JIRA configuration)")
     
     uvicorn.run(starlette_app, host="0.0.0.0", port=port)
 
