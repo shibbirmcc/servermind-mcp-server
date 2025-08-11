@@ -23,9 +23,28 @@ class SplunkConfig:
 
 
 @dataclass
+class JiraConfig:
+    """JIRA connection configuration."""
+    base_url: str
+    username: str = ""
+    api_token: str = ""
+    timeout: int = 30
+    verify_ssl: bool = True
+
+
+@dataclass
+class GitHubConfig:
+    """GitHub connection configuration."""
+    token: str
+    api_url: str = "https://api.github.com"
+    timeout: int = 30
+    verify_ssl: bool = True
+
+
+@dataclass
 class MCPConfig:
     """MCP server configuration."""
-    server_name: str = "splunk-mcp-server"
+    server_name: str = "servermind-mcp-server"
     version: str = "1.0.0"
     max_results_default: int = 100
     search_timeout: int = 300
@@ -35,6 +54,8 @@ class MCPConfig:
 class Config:
     """Main configuration container."""
     splunk: SplunkConfig
+    jira: Optional[JiraConfig]
+    github: Optional[GitHubConfig]
     mcp: MCPConfig
 
 
@@ -99,6 +120,46 @@ class ConfigLoader:
             timeout=timeout
         )
         
+        # Get optional JIRA configuration
+        jira_config = None
+        jira_base_url = os.getenv('JIRA_BASE_URL')
+        jira_username = os.getenv('JIRA_USERNAME')
+        jira_api_token = os.getenv('JIRA_API_TOKEN')
+        
+        if jira_base_url and jira_username and jira_api_token:
+            jira_timeout = self._get_int_env('JIRA_TIMEOUT', 30)
+            jira_verify_ssl = self._get_bool_env('JIRA_VERIFY_SSL', True)
+            
+            jira_config = JiraConfig(
+                base_url=jira_base_url,
+                username=jira_username,
+                api_token=jira_api_token,
+                timeout=jira_timeout,
+                verify_ssl=jira_verify_ssl
+            )
+            logger.info("JIRA configuration loaded")
+        else:
+            logger.info("JIRA configuration not provided, JIRA tools will be disabled")
+        
+        # Get optional GitHub configuration
+        github_config = None
+        github_token = os.getenv('GITHUB_TOKEN')
+        
+        if github_token:
+            github_api_url = os.getenv('GITHUB_API_URL', 'https://api.github.com')
+            github_timeout = self._get_int_env('GITHUB_TIMEOUT', 30)
+            github_verify_ssl = self._get_bool_env('GITHUB_VERIFY_SSL', True)
+            
+            github_config = GitHubConfig(
+                token=github_token,
+                api_url=github_api_url,
+                timeout=github_timeout,
+                verify_ssl=github_verify_ssl
+            )
+            logger.info("GitHub configuration loaded")
+        else:
+            logger.info("GitHub configuration not provided, GitHub tools will be disabled")
+        
         # Get MCP configuration with defaults
         server_name = os.getenv('MCP_SERVER_NAME', 'splunk-mcp-server')
         mcp_version = os.getenv('MCP_VERSION', '1.0.0')
@@ -113,7 +174,12 @@ class ConfigLoader:
             search_timeout=search_timeout
         )
         
-        return Config(splunk=splunk_config, mcp=mcp_config)
+        return Config(
+            splunk=splunk_config,
+            jira=jira_config,
+            github=github_config,
+            mcp=mcp_config
+        )
     
     def _get_int_env(self, env_var: str, default: int) -> int:
         """Get integer value from environment variable with default."""

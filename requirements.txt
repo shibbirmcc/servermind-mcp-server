@@ -17,6 +17,14 @@ splunk-sdk>=2.0.0
 requests>=2.31.0
 urllib3>=2.0.0
 
+# JIRA integration
+jira>=3.5.0
+atlassian-python-api>=3.41.0
+
+# GitHub integration
+PyGithub>=1.59.0
+github3.py>=4.0.1
+
 # JSON handling
 pydantic>=2.0.0
 

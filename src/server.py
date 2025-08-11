@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-MCP server with SSE transport exposing Splunk search tool
+MCP server with SSE transport exposing Splunk, JIRA, and GitHub tools
 Following the working FastMCP pattern
 """
 
 import sys
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from mcp.server.fastmcp import FastMCP
 import uvicorn
 from mcp.server.fastmcp.server import Context
@@ -21,9 +21,21 @@ from src.tools.search import get_search_tool
 from src.tools.indexes import get_indexes_tool
 from src.tools.export import get_export_tool
 from src.tools.monitor import get_monitor_tool
+from src.tools.jira import (
+    execute_jira_search, execute_jira_projects, execute_jira_issue
+)
+from src.tools.github import (
+    execute_github_repositories, execute_github_repository, 
+    execute_github_issues, execute_github_pull_requests
+)
+from src.config import get_config
+
+# Get configuration to determine server name
+config = get_config()
+server_name = config.mcp.server_name
 
 # Create FastMCP instance
-mcp = FastMCP("splunk-mcp-server")
+mcp = FastMCP(server_name)
 
 @mcp.tool()
 async def splunk_search(
@@ -223,6 +235,216 @@ async def splunk_monitor(
     except Exception as e:
         return f"Error executing monitor: {str(e)}"
 
+# JIRA Tools (only registered if JIRA is configured)
+if config.jira is not None:
+    @mcp.tool()
+    async def jira_search(
+        jql: str,
+        max_results: int = 50,
+        fields: List[str] = None,
+        context: Context = None
+    ) -> str:
+        """Search for JIRA issues using JQL (JIRA Query Language).
+        
+        Args:
+            jql: JQL query string (e.g., 'project = PROJ AND status = Open', 'assignee = currentUser()')
+            max_results: Maximum number of results to return (1-1000, default: 50)
+            fields: List of fields to include (e.g., ['key', 'summary', 'status', 'assignee'])
+        
+        Returns:
+            Formatted JIRA search results with analysis suggestions
+        """
+        try:
+            arguments = {"jql": jql, "max_results": max_results}
+            if fields is not None:
+                arguments["fields"] = fields
+            
+            results = await execute_jira_search(arguments)
+            
+            if results and len(results) > 0:
+                return results[0].text
+            else:
+                return "No results returned from JIRA search"
+                
+        except Exception as e:
+            return f"Error executing JIRA search: {str(e)}"
+
+    @mcp.tool()
+    async def jira_projects(context: Context = None) -> str:
+        """Get list of available JIRA projects.
+        
+        Returns:
+            List of JIRA projects with details and usage examples
+        """
+        try:
+            results = await execute_jira_projects({})
+            
+            if results and len(results) > 0:
+                return results[0].text
+            else:
+                return "No projects found"
+                
+        except Exception as e:
+            return f"Error getting JIRA projects: {str(e)}"
+
+    @mcp.tool()
+    async def jira_issue(
+        issue_key: str,
+        fields: List[str] = None,
+        context: Context = None
+    ) -> str:
+        """Get detailed information about a specific JIRA issue.
+        
+        Args:
+            issue_key: JIRA issue key (e.g., 'PROJ-123', 'DEV-456')
+            fields: List of fields to include (optional)
+        
+        Returns:
+            Detailed JIRA issue information
+        """
+        try:
+            arguments = {"issue_key": issue_key}
+            if fields is not None:
+                arguments["fields"] = fields
+            
+            results = await execute_jira_issue(arguments)
+            
+            if results and len(results) > 0:
+                return results[0].text
+            else:
+                return "No issue found"
+                
+        except Exception as e:
+            return f"Error getting JIRA issue: {str(e)}"
+
+# GitHub Tools (only registered if GitHub is configured)
+if config.github is not None:
+    @mcp.tool()
+    async def github_repositories(
+        user_or_org: str = None,
+        repo_type: str = "all",
+        max_results: int = 30,
+        context: Context = None
+    ) -> str:
+        """Get list of GitHub repositories for a user or organization.
+        
+        Args:
+            user_or_org: Username or organization name (leave empty for authenticated user's repositories)
+            repo_type: Repository type filter ('all', 'owner', 'public', 'private', 'member')
+            max_results: Maximum number of results to return (1-100, default: 30)
+        
+        Returns:
+            List of GitHub repositories with statistics and usage suggestions
+        """
+        try:
+            arguments = {"repo_type": repo_type, "max_results": max_results}
+            if user_or_org is not None:
+                arguments["user_or_org"] = user_or_org
+            
+            results = await execute_github_repositories(arguments)
+            
+            if results and len(results) > 0:
+                return results[0].text
+            else:
+                return "No repositories found"
+                
+        except Exception as e:
+            return f"Error getting GitHub repositories: {str(e)}"
+
+    @mcp.tool()
+    async def github_repository(
+        repo_name: str,
+        context: Context = None
+    ) -> str:
+        """Get detailed information about a specific GitHub repository.
+        
+        Args:
+            repo_name: Repository name in format 'owner/repo' (e.g., 'octocat/Hello-World')
+        
+        Returns:
+            Detailed GitHub repository information
+        """
+        try:
+            arguments = {"repo_name": repo_name}
+            
+            results = await execute_github_repository(arguments)
+            
+            if results and len(results) > 0:
+                return results[0].text
+            else:
+                return "No repository found"
+                
+        except Exception as e:
+            return f"Error getting GitHub repository: {str(e)}"
+
+    @mcp.tool()
+    async def github_issues(
+        repo_name: str,
+        state: str = "open",
+        labels: List[str] = None,
+        assignee: str = None,
+        max_results: int = 30,
+        context: Context = None
+    ) -> str:
+        """Get issues from a GitHub repository.
+        
+        Args:
+            repo_name: Repository name in format 'owner/repo' (e.g., 'octocat/Hello-World')
+            state: Issue state filter ('open', 'closed', 'all')
+            labels: List of label names to filter by (e.g., ['bug', 'enhancement'])
+            assignee: Username to filter by assignee
+            max_results: Maximum number of results to return (1-100, default: 30)
+        
+        Returns:
+            List of GitHub issues with analysis
+        """
+        try:
+            arguments = {"repo_name": repo_name, "state": state, "max_results": max_results}
+            if labels is not None:
+                arguments["labels"] = labels
+            if assignee is not None:
+                arguments["assignee"] = assignee
+            
+            results = await execute_github_issues(arguments)
+            
+            if results and len(results) > 0:
+                return results[0].text
+            else:
+                return "No issues found"
+                
+        except Exception as e:
+            return f"Error getting GitHub issues: {str(e)}"
+
+    @mcp.tool()
+    async def github_pull_requests(
+        repo_name: str,
+        state: str = "open",
+        max_results: int = 30,
+        context: Context = None
+    ) -> str:
+        """Get pull requests from a GitHub repository.
+        
+        Args:
+            repo_name: Repository name in format 'owner/repo' (e.g., 'octocat/Hello-World')
+            state: Pull request state filter ('open', 'closed', 'all')
+            max_results: Maximum number of results to return (1-100, default: 30)
+        
+        Returns:
+            List of GitHub pull requests with analysis
+        """
+        try:
+            arguments = {"repo_name": repo_name, "state": state, "max_results": max_results}
+            
+            results = await execute_github_pull_requests(arguments)
+            
+            if results and len(results) > 0:
+                return results[0].text
+            else:
+                return "No pull requests found"
+                
+        except Exception as e:
+            return f"Error getting GitHub pull requests: {str(e)}"
+
 def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlette:
     sse = SseServerTransport("/messages")
     
@@ -268,10 +490,32 @@ def main():
     print(f"  SSE: http://localhost:{port}/sse")
     print(f"  Messages: http://localhost:{port}/messages/")
     print("Tools:")
-    print(f"  - splunk_search: Execute Splunk search queries")
-    print(f"  - splunk_indexes: List available Splunk indexes")
-    print(f"  - splunk_export: Export Splunk search results to various formats")
-    print(f"  - splunk_monitor: Start continuous monitoring of Splunk logs")
+    
+    # Splunk tools (always available)
+    print("  Splunk Tools:")
+    print(f"    - splunk_search: Execute Splunk search queries")
+    print(f"    - splunk_indexes: List available Splunk indexes")
+    print(f"    - splunk_export: Export Splunk search results to various formats")
+    print(f"    - splunk_monitor: Start continuous monitoring of Splunk logs")
+    
+    # JIRA tools (if configured)
+    if config.jira is not None:
+        print("  JIRA Tools:")
+        print(f"    - jira_search: Search JIRA issues using JQL")
+        print(f"    - jira_projects: List available JIRA projects")
+        print(f"    - jira_issue: Get detailed JIRA issue information")
+    else:
+        print("  JIRA Tools: Not configured (set JIRA_BASE_URL, JIRA_USERNAME, JIRA_API_TOKEN)")
+    
+    # GitHub tools (if configured)
+    if config.github is not None:
+        print("  GitHub Tools:")
+        print(f"    - github_repositories: List GitHub repositories")
+        print(f"    - github_repository: Get detailed repository information")
+        print(f"    - github_issues: Get repository issues")
+        print(f"    - github_pull_requests: Get repository pull requests")
+    else:
+        print("  GitHub Tools: Not configured (set GITHUB_TOKEN)")
     
     uvicorn.run(starlette_app, host="0.0.0.0", port=port)
 

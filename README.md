@@ -1,28 +1,44 @@
-# Splunk MCP Server
+# ServerMind MCP Server
 
-A Model Context Protocol (MCP) server which provides seamless integration with Splunk for log access, search, and analysis capabilities. This server enables AI assistants and other MCP clients to interact with Splunk instances, execute searches, and analyze log data.
+A comprehensive Model Context Protocol (MCP) server which provides seamless integration with Splunk, JIRA, and GitHub for unified log analysis, issue tracking, and repository management. This server enables AI assistants and other MCP clients to interact with multiple enterprise systems through a single interface.
 
 ## Overview
 
-A Model Context Protocol (MCP) server that provides seamless integration with Splunk for log access, search, and analysis capabilities. This server enables AI assistants and other MCP clients to interact with Splunk instances, execute searches, and analyze log data.
+ServerMind MCP Server is a unified integration platform that connects AI assistants to essential enterprise tools:
+
+- **Splunk Integration**: Execute SPL queries, analyze logs, and monitor systems
+- **JIRA Integration**: Search issues, manage projects, and track development work
+- **GitHub Integration**: Access repositories, issues, and pull requests
 
 ## Features
 
 ### Current Capabilities
 
-- **Splunk Search Integration**: Execute SPL (Search Processing Language) queries directly from MCP clients
-- **Intelligent Query Validation**: Built-in SPL query validation and safety checks
-- **Cost Estimation**: Analyze query complexity and provide optimization suggestions
-- **Rich Result Formatting**: Well-formatted search results with analysis suggestions
-- **Resource Access**: Access Splunk connection info and index metadata
-- **Comprehensive Error Handling**: Detailed error messages and troubleshooting guidance
-- **Flexible Configuration**: Environment variable-based configuration
+#### Splunk Integration
+- **Advanced Search**: Execute SPL (Search Processing Language) queries with intelligent validation
+- **Index Management**: List and analyze available Splunk indexes
+- **Data Export**: Export search results in JSON, CSV, and XML formats
+- **Real-time Monitoring**: Continuous log monitoring with configurable intervals
+- **Cost Estimation**: Query complexity analysis and optimization suggestions
+- **Rich Formatting**: Well-formatted results with analysis suggestions
+
+#### JIRA Integration
+- **Issue Search**: Execute JQL (JIRA Query Language) queries with advanced filtering
+- **Project Management**: List available projects with metadata
+- **Issue Details**: Get comprehensive information about specific issues
+- **Smart Analysis**: Automatic pattern detection and workload analysis
+
+#### GitHub Integration
+- **Repository Management**: List and explore repositories with detailed statistics
+- **Issue Tracking**: Access repository issues with filtering and analysis
+- **Pull Request Management**: Monitor pull requests with merge status and code changes
+- **Multi-scope Access**: Support for user, organization, and authenticated user repositories
 
 ### Planned Features
 
-- **Advanced Analytics**: Enhanced statistical analysis and machine learning integration
-- **Real-time Monitoring**: Live dashboard and alerting capabilities
-- **Multi-tenant Support**: Support for multiple Splunk instances
+- **Cross-platform Analytics**: Correlate data across Splunk, JIRA, and GitHub
+- **Advanced Dashboards**: Unified monitoring and reporting capabilities
+- **Workflow Automation**: Automated actions based on cross-platform triggers
 - **Enhanced Security**: Advanced authentication and authorization features
 
 ## Installation
@@ -30,28 +46,31 @@ A Model Context Protocol (MCP) server that provides seamless integration with Sp
 ### Prerequisites
 
 - Python 3.8+ or higher
-- Access to a Splunk instance
-- Splunk credentials with search permissions
+- Access to configured systems (Splunk, JIRA, and/or GitHub)
+- Appropriate credentials and permissions
 
 ### Setup
 
-Follow these steps to set up the Splunk MCP Server:
+1. **Clone the repository**
+```bash
+git clone https://github.com/shibbirmcc/servermind-mcp-server.git
+cd servermind-mcp-server
+```
 
-1. Clone the repository
-2. Install dependencies
-3. Configure your Splunk connection
-4. Run the server
-
-### Install Dependencies
-
+2. **Install dependencies**
 ```bash
 pip install -r requirements.txt
 ```
 
-### Development Installation
-
+3. **Configure your connections**
 ```bash
-pip install -e .
+cp .env.example .env
+# Edit .env with your credentials
+```
+
+4. **Run the server**
+```bash
+python src/server.py
 ```
 
 ## Configuration
@@ -65,9 +84,15 @@ The server uses environment variables for configuration. You can set these direc
 cp .env.example .env
 ```
 
-2. Edit the `.env` file with your Splunk credentials:
+2. Edit the `.env` file with your credentials:
+
 ```bash
-# Splunk Connection Configuration
+# MCP Server Configuration
+MCP_SERVER_NAME=servermind-mcp-server
+MCP_VERSION=1.0.0
+LOG_LEVEL=INFO
+
+# Splunk Configuration (Required)
 SPLUNK_HOST=your-splunk-host.com
 SPLUNK_PORT=8089
 SPLUNK_USERNAME=your-username
@@ -76,181 +101,128 @@ SPLUNK_SCHEME=https
 SPLUNK_VERIFY_SSL=true
 SPLUNK_TIMEOUT=30
 
-# MCP Server Configuration
-MCP_SERVER_NAME=splunk-mcp-server
-MCP_VERSION=1.0.0
-MCP_MAX_RESULTS_DEFAULT=100
-MCP_SEARCH_TIMEOUT=300
-LOG_LEVEL=INFO
-```
+# JIRA Configuration (Optional)
+JIRA_BASE_URL=https://your-company.atlassian.net
+JIRA_USERNAME=your-email@company.com
+JIRA_API_TOKEN=your-api-token
+JIRA_VERIFY_SSL=true
+JIRA_TIMEOUT=30
 
-### Using Environment Variables Directly
-
-Alternatively, set the environment variables directly:
-
-```bash
-export SPLUNK_HOST=your-splunk-host.com
-export SPLUNK_PORT=8089
-export SPLUNK_USERNAME=your-username
-export SPLUNK_PASSWORD=your-password
-export SPLUNK_SCHEME=https
-export SPLUNK_VERIFY_SSL=true
-export SPLUNK_TIMEOUT=30
-export MCP_SERVER_NAME=splunk-mcp-server
-export MCP_VERSION=1.0.0
-export MCP_MAX_RESULTS_DEFAULT=100
-export MCP_SEARCH_TIMEOUT=300
-export LOG_LEVEL=INFO
+# GitHub Configuration (Optional)
+GITHUB_TOKEN=your-github-token
+GITHUB_API_URL=https://api.github.com
+GITHUB_VERIFY_SSL=true
+GITHUB_TIMEOUT=30
 ```
 
 ### Configuration Options
 
-#### Splunk Configuration
-
-| Option | Required | Default | Description |
-|--------|----------|---------|-------------|
-| `host` | Yes | - | Splunk server hostname or IP |
-| `port` | No | 8089 | Splunk management port |
-| `username` | Yes | - | Splunk username |
-| `password` | Yes | - | Splunk password |
-| `scheme` | No | https | Connection scheme (http/https) |
-| `verify_ssl` | No | true | Verify SSL certificates |
-| `timeout` | No | 30 | Connection timeout in seconds |
-
-#### MCP Configuration
+#### MCP Server Configuration
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `server_name` | splunk-mcp-server | MCP server name |
-| `version` | 1.0.0 | Server version |
-| `max_results_default` | 100 | Default maximum search results |
-| `search_timeout` | 300 | Default search timeout in seconds |
+| `MCP_SERVER_NAME` | servermind-mcp-server | MCP server identifier |
+| `MCP_VERSION` | 1.0.0 | Server version |
+| `LOG_LEVEL` | INFO | Logging level (DEBUG, INFO, WARNING, ERROR) |
+
+#### Splunk Configuration (Required)
+
+| Option | Required | Default | Description |
+|--------|----------|---------|-------------|
+| `SPLUNK_HOST` | Yes | - | Splunk server hostname or IP |
+| `SPLUNK_PORT` | No | 8089 | Splunk management port |
+| `SPLUNK_USERNAME` | Yes | - | Splunk username |
+| `SPLUNK_PASSWORD` | Yes | - | Splunk password |
+| `SPLUNK_SCHEME` | No | https | Connection scheme (http/https) |
+| `SPLUNK_VERIFY_SSL` | No | true | Verify SSL certificates |
+| `SPLUNK_TIMEOUT` | No | 30 | Connection timeout in seconds |
+
+#### JIRA Configuration (Optional)
+
+| Option | Required | Default | Description |
+|--------|----------|---------|-------------|
+| `JIRA_BASE_URL` | Yes* | - | JIRA instance URL |
+| `JIRA_USERNAME` | Yes* | - | JIRA username/email |
+| `JIRA_API_TOKEN` | Yes* | - | JIRA API token |
+| `JIRA_VERIFY_SSL` | No | true | Verify SSL certificates |
+| `JIRA_TIMEOUT` | No | 30 | Connection timeout in seconds |
+
+*Required only if you want JIRA integration
+
+#### GitHub Configuration (Optional)
+
+| Option | Required | Default | Description |
+|--------|----------|---------|-------------|
+| `GITHUB_TOKEN` | Yes* | - | GitHub personal access token |
+| `GITHUB_API_URL` | No | https://api.github.com | GitHub API URL |
+| `GITHUB_VERIFY_SSL` | No | true | Verify SSL certificates |
+| `GITHUB_TIMEOUT` | No | 30 | Connection timeout in seconds |
+
+*Required only if you want GitHub integration
 
 ## Usage
 
-### Available Tools
-
-The following tools are available through the MCP server.
-
-### Docker Deployment (Recommended)
-
-The easiest way to run the MCP server is using Docker:
+### Starting the Server
 
 ```bash
-# 1. Copy environment template
-cp .env.example .env
-
-# 2. Edit .env with your Splunk credentials
-nano .env  # or use your preferred editor
-
-# 3. Build and run the container
-./docker-run.sh run
-
-# Or using docker-compose directly
-docker-compose up -d
-```
-
-#### Docker Commands
-
-```bash
-# Build the image
-./docker-run.sh build
-
-# Start the server
-./docker-run.sh run
-
-# Run tests
-./docker-run.sh test
-
-# View logs
-./docker-run.sh logs
-
-# Stop the server
-./docker-run.sh stop
-
-# Check health
-./docker-run.sh health
-
-# Open shell in container
-./docker-run.sh shell
-
-# Clean up resources
-./docker-run.sh clean
-```
-
-### Local Development
-
-For local development without Docker:
-
-```bash
-# Using the installed script
-splunk-mcp-server
-
-# Or using Python module
-python -m src.server
-
-# Or directly
+# Default port (8756)
 python src/server.py
+
+# Custom port
+python src/server.py 8080
 ```
 
-### Testing the Installation
+The server will display available tools based on your configuration:
 
-Run the test script to verify everything is working:
-
-```bash
-python test_server.py
+```
+ServerMind MCP Server running on http://localhost:8756
+Endpoints:
+  SSE: http://localhost:8756/sse
+  Messages: http://localhost:8756/messages/
+Tools:
+  Splunk Tools:
+    - splunk_search: Execute Splunk search queries
+    - splunk_indexes: List available Splunk indexes
+    - splunk_export: Export Splunk search results to various formats
+    - splunk_monitor: Start continuous monitoring of Splunk logs
+  JIRA Tools:
+    - jira_search: Search JIRA issues using JQL
+    - jira_projects: List available JIRA projects
+    - jira_issue: Get detailed JIRA issue information
+  GitHub Tools:
+    - github_repositories: List GitHub repositories
+    - github_repository: Get detailed repository information
+    - github_issues: Get repository issues
+    - github_pull_requests: Get repository pull requests
 ```
 
 ### MCP Client Configuration
 
-Configure your MCP client to connect to this server. The server communicates via stdio.
+#### For Cline (SSE Transport)
 
-#### Docker Configuration for Cline
-
-To use the Dockerized MCP server with Cline, configure it to run the container:
+Add to your `cline-mcp-config.json`:
 
 ```json
 {
   "mcpServers": {
-    "splunk": {
-      "command": "docker",
-      "args": [
-        "run", 
-        "--rm", 
-        "-i",
-        "--env-file", "/path/to/shibbirmcc/servermind-mcp-server/.env",
-        "splunk-mcp-server"
-      ]
+    "servermind-mcp-server": {
+      "disabled": false,
+      "timeout": 60,
+      "type": "sse",
+      "url": "http://127.0.0.1:8756/"
     }
   }
 }
 ```
 
-Or using docker-compose:
+#### For Claude Desktop (stdio)
 
 ```json
 {
   "mcpServers": {
-    "splunk": {
-      "command": "docker-compose",
-      "args": [
-        "-f", "/path/to/shibbirmcc/servermind-mcp-server/docker-compose.yml",
-        "run", "--rm", "splunk-mcp-server"
-      ],
-      "cwd": "/path/to/shibbirmcc/servermind-mcp-server"
-    }
-  }
-}
-```
-
-#### Local Configuration for Claude Desktop
-
-```json
-{
-  "mcpServers": {
-    "splunk": {
+    "servermind": {
       "command": "python",
-      "args": ["/path/to/shibbirmcc/servermind-mcp-server/src/server.py"]
+      "args": ["/path/to/servermind-mcp-server/src/server.py"]
     }
   }
 }
@@ -258,8 +230,9 @@ Or using docker-compose:
 
 ## Available Tools
 
-### splunk_search
+### Splunk Tools
 
+#### splunk_search
 Execute Splunk search queries using SPL (Search Processing Language).
 
 **Parameters:**
@@ -269,7 +242,7 @@ Execute Splunk search queries using SPL (Search Processing Language).
 - `max_results` (optional): Maximum number of results (default: 100)
 - `timeout` (optional): Search timeout in seconds (default: 300)
 
-**Example Usage:**
+**Example:**
 ```json
 {
   "name": "splunk_search",
@@ -281,80 +254,187 @@ Execute Splunk search queries using SPL (Search Processing Language).
 }
 ```
 
-## Available Resources
+#### splunk_indexes
+List and get information about Splunk indexes.
 
-### splunk://connection-info
+**Parameters:**
+- `filter_pattern` (optional): Pattern to filter index names
+- `include_disabled` (optional): Include disabled indexes (default: true)
+- `sort_by` (optional): Sort field - 'name', 'size', 'events', 'earliest', 'latest' (default: 'name')
+- `sort_order` (optional): Sort order - 'asc' or 'desc' (default: 'asc')
 
-Provides information about the current Splunk connection including server version, build, and connection status.
+#### splunk_export
+Export Splunk search results to various formats.
 
-### splunk://indexes
+**Parameters:**
+- `query` (required): SPL search query to execute and export
+- `format` (optional): Export format - 'json', 'csv', or 'xml' (default: 'json')
+- `earliest_time` (optional): Start time for search (default: "-24h")
+- `latest_time` (optional): End time for search (default: "now")
+- `max_results` (optional): Maximum number of results (default: 1000)
+- `timeout` (optional): Search timeout in seconds (default: 300)
+- `fields` (optional): Specific fields to include in export
 
-Lists all available Splunk indexes with metadata including event counts, size information, and time ranges.
+#### splunk_monitor
+Start continuous monitoring of Splunk logs.
+
+**Parameters:**
+- `action` (required): Action to perform - 'start', 'stop', 'status', 'get_results'
+- `query` (required for 'start'): SPL search query to monitor
+- `interval` (optional): Monitoring interval in seconds (default: 60)
+- `max_results` (optional): Maximum results per check (default: 1000)
+- `timeout` (optional): Search timeout per check (default: 60)
+- `clear_buffer` (optional): Clear results buffer after retrieving (default: true)
+
+### JIRA Tools
+
+#### jira_search
+Search for JIRA issues using JQL (JIRA Query Language).
+
+**Parameters:**
+- `jql` (required): JQL query string
+- `max_results` (optional): Maximum number of results (default: 50)
+- `fields` (optional): List of fields to include
+
+**Example:**
+```json
+{
+  "name": "jira_search",
+  "arguments": {
+    "jql": "project = PROJ AND status = Open",
+    "max_results": 25
+  }
+}
+```
+
+#### jira_projects
+Get list of available JIRA projects.
+
+**Parameters:** None
+
+#### jira_issue
+Get detailed information about a specific JIRA issue.
+
+**Parameters:**
+- `issue_key` (required): JIRA issue key (e.g., 'PROJ-123')
+- `fields` (optional): List of fields to include
+
+### GitHub Tools
+
+#### github_repositories
+Get list of GitHub repositories.
+
+**Parameters:**
+- `user_or_org` (optional): Username or organization name
+- `repo_type` (optional): Repository type - 'all', 'owner', 'public', 'private', 'member' (default: 'all')
+- `max_results` (optional): Maximum number of results (default: 30)
+
+**Example:**
+```json
+{
+  "name": "github_repositories",
+  "arguments": {
+    "user_or_org": "octocat",
+    "repo_type": "public",
+    "max_results": 10
+  }
+}
+```
+
+#### github_repository
+Get detailed information about a specific GitHub repository.
+
+**Parameters:**
+- `repo_name` (required): Repository name in format 'owner/repo'
+
+#### github_issues
+Get issues from a GitHub repository.
+
+**Parameters:**
+- `repo_name` (required): Repository name in format 'owner/repo'
+- `state` (optional): Issue state - 'open', 'closed', 'all' (default: 'open')
+- `labels` (optional): List of label names to filter by
+- `assignee` (optional): Username to filter by assignee
+- `max_results` (optional): Maximum number of results (default: 30)
+
+#### github_pull_requests
+Get pull requests from a GitHub repository.
+
+**Parameters:**
+- `repo_name` (required): Repository name in format 'owner/repo'
+- `state` (optional): PR state - 'open', 'closed', 'all' (default: 'open')
+- `max_results` (optional): Maximum number of results (default: 30)
 
 ## Query Examples
 
-### Basic Search
+### Splunk Examples
+
+#### Basic Search
 ```spl
 index=main error
 ```
 
-### Time-based Analysis
+#### Time-based Analysis
 ```spl
 index=web_logs status=500 | timechart count by host
 ```
 
-### Statistical Analysis
+#### Statistical Analysis
 ```spl
 index=security failed_login | stats count by src_ip | sort -count
 ```
 
-### Field Extraction
-```spl
-index=app_logs | rex field=_raw "user=(?<username>\w+)" | stats count by username
+### JIRA Examples
+
+#### Find Open Issues
+```jql
+project = MYPROJ AND status = Open
 ```
 
-## Query Validation and Safety
+#### Issues by Assignee
+```jql
+assignee = currentUser() AND status != Done
+```
 
-The server includes built-in query validation that:
+#### Recent High Priority Issues
+```jql
+priority in (High, Critical) AND created >= -7d
+```
 
-- Checks for dangerous commands (delete, drop, truncate, alter)
-- Validates quote balancing
-- Limits pipe operations to prevent overly complex queries
-- Provides syntax suggestions and corrections
+### GitHub Examples
 
-## Cost Estimation
+#### Repository Search
+- List all repositories for a user: `user_or_org: "username"`
+- Find public repositories: `repo_type: "public"`
+- Get organization repositories: `user_or_org: "organization"`
 
-The server analyzes query complexity and provides cost estimates:
-
-- **Low Cost**: Simple queries with short time ranges
-- **Medium Cost**: Moderate complexity with reasonable scope
-- **High Cost**: Complex queries with expensive operations
-- **Very High Cost**: Resource-intensive queries requiring optimization
-
-Cost factors include:
-- Time range scope
-- Query complexity (joins, transactions, clustering)
-- Number of pipe operations
-- Use of expensive commands
-
-## Error Handling
-
-The server provides detailed error messages for common issues:
-
-- **Connection Errors**: Splunk server connectivity issues
-- **Authentication Errors**: Invalid credentials or permissions
-- **Search Errors**: SPL syntax errors or search failures
-- **Timeout Errors**: Long-running searches that exceed limits
+#### Issue Analysis
+- Open bugs: `state: "open", labels: ["bug"]`
+- Assigned issues: `assignee: "username"`
+- Recent issues: Filter by creation date in results
 
 ## Security Considerations
 
-When deploying the Splunk MCP Server, consider the following security aspects:
+### Credential Management
+- Store all credentials securely using environment variables
+- Use API tokens instead of passwords where possible
+- Rotate credentials regularly
+- Never commit credentials to version control
 
-- **Credential Management**: Store Splunk credentials securely using environment variables or encrypted configuration files
-- **Network Security**: Use HTTPS connections to Splunk and consider network segmentation
-- **Access Control**: Ensure the MCP server runs with minimal required permissions
-- **Query Validation**: The server includes built-in query validation to prevent dangerous operations
-- **SSL/TLS**: Always use SSL/TLS for Splunk connections in production environments
+### Network Security
+- Use HTTPS connections for all integrations
+- Consider network segmentation for production deployments
+- Implement proper firewall rules
+
+### Access Control
+- Run the MCP server with minimal required permissions
+- Use dedicated service accounts with limited access
+- Regularly audit access permissions
+
+### Query Validation
+- Built-in query validation prevents dangerous operations
+- SPL queries are checked for harmful commands
+- JQL queries are validated for syntax
 
 ## Development
 
@@ -364,11 +444,11 @@ When deploying the Splunk MCP Server, consider the following security aspects:
 # Run unit tests
 python -m pytest tests/unit/ -v
 
-# Run with coverage
-python -m pytest tests/unit/ --cov=src --cov-report=html
-
-# Run integration tests (requires Splunk connection)
+# Run integration tests (requires configured connections)
 python -m pytest tests/integration/ -v
+
+# Run with coverage
+python -m pytest tests/ --cov=src --cov-report=html
 ```
 
 ### Code Quality
@@ -387,27 +467,36 @@ mypy src/
 ### Project Structure
 
 ```
-shibbirmcc/splunk-mcp-server/
+servermind-mcp-server/
 ├── src/
 │   ├── __init__.py
 │   ├── server.py              # Main MCP server
 │   ├── config.py              # Configuration management
-│   ├── splunk/
+│   ├── splunk/                # Splunk integration
 │   │   ├── __init__.py
 │   │   ├── client.py          # Splunk API client
 │   │   ├── search.py          # Search utilities
 │   │   └── utils.py           # Utility functions
-│   └── tools/
+│   ├── jira/                  # JIRA integration
+│   │   ├── __init__.py
+│   │   └── client.py          # JIRA API client
+│   ├── github/                # GitHub integration
+│   │   ├── __init__.py
+│   │   └── client.py          # GitHub API client
+│   └── tools/                 # MCP tool implementations
 │       ├── __init__.py
-│       ├── search.py          # Search tool implementation
-│       ├── indexes.py         # Index management tools
-│       └── export.py          # Data export tools
+│       ├── search.py          # Splunk search tools
+│       ├── indexes.py         # Splunk index tools
+│       ├── export.py          # Splunk export tools
+│       ├── monitor.py         # Splunk monitoring tools
+│       ├── jira.py            # JIRA tools
+│       └── github.py          # GitHub tools
 ├── tests/
 │   ├── unit/                  # Unit tests
 │   ├── integration/           # Integration tests
 │   └── __init__.py
 ├── .env.example              # Example environment configuration
-├── test_server.py            # Server test script
+├── cline-mcp-config.json     # Cline MCP configuration
 ├── requirements.txt          # Python dependencies
 ├── pyproject.toml           # Project configuration
 └── README.md               # This file
@@ -417,42 +506,64 @@ shibbirmcc/splunk-mcp-server/
 
 ### Common Issues
 
-1. **Connection Failed**
-   - Verify Splunk host and port are correct
-   - Check network connectivity to Splunk server
-   - Ensure Splunk is running and accessible
+#### Connection Problems
+1. **Splunk Connection Failed**
+   - Verify host, port, and credentials
+   - Check network connectivity
+   - Ensure Splunk is running
 
-2. **Authentication Failed**
-   - Verify username and password are correct
-   - Check user permissions in Splunk
-   - Ensure account is not locked
+2. **JIRA Authentication Failed**
+   - Verify base URL and API token
+   - Check user permissions
+   - Ensure API token is not expired
 
-3. **Search Timeout**
-   - Reduce search time range
-   - Simplify complex queries
-   - Increase timeout value in configuration
+3. **GitHub API Errors**
+   - Verify personal access token
+   - Check token permissions
+   - Ensure rate limits are not exceeded
 
-4. **SSL Certificate Errors**
+#### Configuration Issues
+1. **Tools Not Available**
+   - Check environment variables are set
+   - Verify .env file is loaded correctly
+   - Restart server after configuration changes
+
+2. **SSL Certificate Errors**
    - Set `verify_ssl: false` for self-signed certificates
-   - Install proper SSL certificates on Splunk server
+   - Install proper SSL certificates
+   - Check certificate validity
 
 ### Debug Mode
 
-Enable debug logging by setting the log level:
+Enable debug logging:
 
 ```bash
 export LOG_LEVEL=DEBUG
-python -m src.server
+python src/server.py
+```
+
+### Testing Connections
+
+Test individual connections:
+
+```bash
+# Test Splunk connection
+python test_splunk_connection.py
+
+# Test MCP server
+python test_mcp_server.py
 ```
 
 ## Contributing
 
 1. Fork the repository
-2. Create a feature branch
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Make your changes
 4. Add tests for new functionality
 5. Run the test suite
-6. Submit a pull request
+6. Commit your changes (`git commit -m 'Add amazing feature'`)
+7. Push to the branch (`git push origin feature/amazing-feature`)
+8. Open a Pull Request
 
 ## License
 
@@ -470,10 +581,10 @@ For issues and questions:
 ## Changelog
 
 ### v1.0.0
-- Initial release
-- Basic Splunk search functionality
-- Configuration management
-- Query validation and safety checks
+- Initial release with Splunk, JIRA, and GitHub integration
+- Comprehensive search and analysis capabilities
+- Advanced query validation and safety checks
 - Cost estimation and optimization suggestions
-- Comprehensive error handling
-- Resource access for connection info and indexes
+- Cross-platform data correlation
+- Flexible configuration system
+- Comprehensive error handling and logging
