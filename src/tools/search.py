@@ -12,23 +12,24 @@ logger = structlog.get_logger(__name__)
 
 class SplunkSearchTool:
     """MCP tool for executing Splunk searches."""
-    
+
     def __init__(self):
         """Initialize the search tool."""
         self.config = get_config()
         self._client: Optional[SplunkClient] = None
-    
+
     def get_client(self) -> SplunkClient:
         """Get or create Splunk client instance."""
         if self._client is None:
             self._client = SplunkClient(self.config.splunk)
         return self._client
-    
+
     def get_tool_definition(self) -> Tool:
         """Get the MCP tool definition for splunk_search."""
         return Tool(
             name="splunk_search",
-            description="Execute a Splunk search query using SPL (Search Processing Language)",
+            description="Execute a Splunk search query using SPL (Search Processing Language). "
+                        "Optionally return raw results for chaining.",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -69,13 +70,13 @@ class SplunkSearchTool:
                 "required": ["query"]
             }
         )
-    
+
     async def execute(self, arguments: Dict[str, Any]) -> List[TextContent]:
         """Execute the splunk_search tool.
-        
+
         Args:
             arguments: Tool arguments containing query and search parameters
-            
+
         Returns:
             List[TextContent]: Search results and metadata
         """
@@ -84,32 +85,32 @@ class SplunkSearchTool:
             query = arguments.get("query")
             if not query:
                 raise ValueError("Query parameter is required")
-            
+
             earliest_time = arguments.get("earliest_time", "-24h")
             latest_time = arguments.get("latest_time", "now")
             max_results = arguments.get("max_results", self.config.mcp.max_results_default)
             timeout = arguments.get("timeout", self.config.mcp.search_timeout)
             raw_return = arguments.get("raw_return", False)
-            
-            logger.info("Executing Splunk search", 
-                       query=query, 
+
+            logger.info("Executing Splunk search",
+                       query=query,
                        earliest_time=earliest_time,
                        latest_time=latest_time,
                        max_results=max_results,
                        raw_return=raw_return)
-            
+
             # Get client and execute search
             client = self.get_client()
-            
+
             search_kwargs = {
                 'earliest_time': earliest_time,
                 'latest_time': latest_time,
                 'max_results': max_results,
                 'timeout': timeout
             }
-            
+
             results = client.execute_search(query, **search_kwargs)
-            
+
             # Format results for MCP response
             return self._format_search_results(query, results, search_kwargs, raw_return)
             
