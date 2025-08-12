@@ -39,9 +39,9 @@ class AutomatedIssueCreationTool:
                     },
                     "platform": {
                         "type": "string",
-                        "description": "Platform to create issues on",
-                        "enum": ["github", "jira", "both"],
-                        "default": "github"
+                        "description": "Platform to create issues on ('auto' intelligently selects based on availability)",
+                        "enum": ["github", "jira", "both", "auto"],
+                        "default": "auto"
                     },
                     "github_repo": {
                         "type": "string",
@@ -94,11 +94,11 @@ class AutomatedIssueCreationTool:
         )
     
     async def execute(self, arguments: Dict[str, Any]) -> List[TextContent]:
-        """Execute the automated issue creation tool."""
+        """Execute the automated issue creation tool with intelligent platform selection."""
         try:
             # Extract arguments
             splunk_query = arguments.get("splunk_query")
-            platform = arguments.get("platform", "github")
+            platform = arguments.get("platform", "auto")  # Default to auto-detection
             github_repo = arguments.get("github_repo")
             jira_project = arguments.get("jira_project")
             earliest_time = arguments.get("earliest_time", "-24h")
@@ -113,14 +113,19 @@ class AutomatedIssueCreationTool:
             if not splunk_query:
                 raise ValueError("Splunk query parameter is required")
             
-            if platform in ["github", "both"] and not github_repo:
-                raise ValueError("GitHub repository is required when platform is 'github' or 'both'")
+            # Intelligent platform selection
+            selected_platforms = await self._select_platforms(platform, github_repo, jira_project)
             
-            if platform in ["jira", "both"] and not jira_project:
-                raise ValueError("JIRA project is required when platform is 'jira' or 'both'")
+            if not selected_platforms:
+                return [TextContent(
+                    type="text",
+                    text="❌ **No Available Platforms**\n\n"
+                         "Neither JIRA nor GitHub is properly configured or accessible. "
+                         "Please check your configuration and connectivity."
+                )]
             
             logger.info("Starting automated issue creation", 
-                       query=splunk_query, platform=platform, max_results=max_results)
+                       query=splunk_query, platforms=selected_platforms, max_results=max_results)
             
             # Step 1: Execute Splunk search
             search_results = await self._execute_splunk_search(
@@ -161,20 +166,23 @@ class AutomatedIssueCreationTool:
                         auto_assign, custom_labels
                     )
                     
-                    # Create issues on specified platforms
-                    if platform in ["github", "both"]:
-                        github_result = await self._create_github_issue(
-                            github_repo, issue_data
-                        )
-                        if github_result:
-                            created_issues.append(("GitHub", github_result))
-                    
-                    if platform in ["jira", "both"]:
-                        jira_result = await self._create_jira_issue(
-                            jira_project, issue_data
-                        )
-                        if jira_result:
-                            created_issues.append(("JIRA", jira_result))
+                    # Create issues on selected platforms
+                    for selected_platform in selected_platforms:
+                        if selected_platform["name"] == "github":
+                            github_result = await self._create_github_issue(
+                                selected_platform["repo"], issue_data
+                            )
+                            if github_result:
+                                status_info = f" ({selected_platform['status']})" if selected_platform['status'] != 'available' else ""
+                                created_issues.append((f"GitHub{status_info}", github_result))
+                        
+                        elif selected_platform["name"] == "jira":
+                            jira_result = await self._create_jira_issue(
+                                selected_platform["project"], issue_data
+                            )
+                            if jira_result:
+                                status_info = f" ({selected_platform['status']})" if selected_platform['status'] != 'available' else ""
+                                created_issues.append((f"JIRA{status_info}", jira_result))
                 
                 except Exception as e:
                     logger.error(f"Error creating issue for group {i}", error=str(e))
@@ -195,7 +203,111 @@ class AutomatedIssueCreationTool:
                      f"Please check your parameters and try again."
             )]
     
-    async def _execute_splunk_search(self, query: str, earliest_time: str, 
+    async def _select_platforms(self, platform: str, github_repo: Optional[str], 
+                               jira_project: Optional[str]) -> List[Dict[str, Any]]:
+        """Intelligently select platforms based on configuration and connectivity."""
+        selected_platforms = []
+        
+        # If platform is explicitly specified, validate and use it
+        if platform in ["github", "jira", "both"]:
+            if platform in ["github", "both"]:
+                if self.config.github and github_repo:
+                    # Test GitHub connectivity
+                    github_available = await self._test_github_connectivity()
+                    if github_available:
+                        selected_platforms.append({
+                            "name": "github",
+                            "repo": github_repo,
+                            "status": "available"
+                        })
+                    else:
+                        logger.warning("GitHub configured but not accessible")
+            
+            if platform in ["jira", "both"]:
+                if self.config.jira and jira_project:
+                    # Test JIRA connectivity
+                    jira_available = await self._test_jira_connectivity()
+                    if jira_available:
+                        selected_platforms.append({
+                            "name": "jira", 
+                            "project": jira_project,
+                            "status": "available"
+                        })
+                    else:
+                        logger.warning("JIRA configured but not accessible")
+        
+        # Auto-selection logic: prefer JIRA, fallback to GitHub
+        elif platform == "auto":
+            # First, try JIRA if configured
+            if self.config.jira and jira_project:
+                jira_available = await self._test_jira_connectivity()
+                if jira_available:
+                    selected_platforms.append({
+                        "name": "jira",
+                        "project": jira_project, 
+                        "status": "primary"
+                    })
+                    logger.info("Auto-selected JIRA as primary platform")
+                else:
+                    logger.warning("JIRA configured but not accessible, trying GitHub fallback")
+            
+            # If JIRA not available or not configured, try GitHub
+            if not selected_platforms and self.config.github and github_repo:
+                github_available = await self._test_github_connectivity()
+                if github_available:
+                    selected_platforms.append({
+                        "name": "github",
+                        "repo": github_repo,
+                        "status": "fallback"
+                    })
+                    logger.info("Auto-selected GitHub as fallback platform")
+            
+            # If no repo/project specified but configs exist, provide helpful message
+            if not selected_platforms:
+                if self.config.jira and not jira_project:
+                    logger.warning("JIRA configured but no project specified")
+                if self.config.github and not github_repo:
+                    logger.warning("GitHub configured but no repository specified")
+        
+        return selected_platforms
+    
+    async def _test_jira_connectivity(self) -> bool:
+        """Test JIRA connectivity and accessibility."""
+        try:
+            if not self.config.jira:
+                return False
+            
+            # Try to get JIRA projects to test connectivity
+            from ..jira.client import JIRAClient
+            jira_client = JIRAClient(self.config.jira)
+            
+            # Simple connectivity test
+            projects = await jira_client.get_projects()
+            return len(projects) >= 0  # Even empty list means connection works
+            
+        except Exception as e:
+            logger.error("JIRA connectivity test failed", error=str(e))
+            return False
+    
+    async def _test_github_connectivity(self) -> bool:
+        """Test GitHub connectivity and accessibility."""
+        try:
+            if not self.config.github:
+                return False
+            
+            # Try to access GitHub API to test connectivity
+            from ..github.client import GitHubClient
+            github_client = GitHubClient(self.config.github)
+            
+            # Simple connectivity test - get user info
+            user_info = await github_client.get_user()
+            return user_info is not None
+            
+        except Exception as e:
+            logger.error("GitHub connectivity test failed", error=str(e))
+            return False
+    
+    async def _execute_splunk_search(self, query: str, earliest_time: str,
                                    latest_time: str, max_results: int) -> List[Dict[str, Any]]:
         """Execute Splunk search and return parsed results."""
         try:
