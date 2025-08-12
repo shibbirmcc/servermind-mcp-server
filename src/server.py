@@ -33,6 +33,8 @@ from src.tools.resolve_splunk_index import get_resolve_splunk_index_tool
 from src.tools.root_cause_identification_prompt import get_root_cause_identification_prompt_tool
 from src.tools.splunk_log_analysis import get_splunk_log_analysis_prompt_tool
 from src.tools.splunk_query_prompt import get_splunk_query_prompt_tool
+from src.tools.splunk_trace_search_by_ids import get_splunk_trace_search_by_ids_tool
+from src.tools.error_logs import get_tool_definition as get_error_logs_tool
 
 # Create FastMCP instance
 mcp = FastMCP("splunk-mcp-server")
@@ -461,6 +463,83 @@ async def get_splunk_query_prompt(
     except Exception as e:
         return f"Error retrieving splunk query prompt: {str(e)}"
 
+@mcp.tool()
+async def splunk_trace_search_by_ids(
+    trace_ids: List[str],
+    indexes: List[str] = None,
+    trace_id_field: str = "traceId",
+    earliest_time: str = "-24h",
+    latest_time: str = "now",
+    max_results: int = 1000,
+    timeout: int = 300,
+    include_raw: bool = True,
+    sort_by_time: bool = True,
+    additional_fields: List[str] = None,
+    context: Context = None
+) -> str:
+    """Search Splunk for traces by specific trace IDs. 
+    
+    This tool allows you to find all log entries associated with one or more trace IDs 
+    across specified indexes or all available indexes.
+    """
+    try:
+        trace_search_tool = get_splunk_trace_search_by_ids_tool()
+        arguments = {
+            "trace_ids": trace_ids,
+            "trace_id_field": trace_id_field,
+            "earliest_time": earliest_time,
+            "latest_time": latest_time,
+            "max_results": max_results,
+            "timeout": timeout,
+            "include_raw": include_raw,
+            "sort_by_time": sort_by_time
+        }
+        
+        if indexes is not None:
+            arguments["indexes"] = indexes
+        if additional_fields is not None:
+            arguments["additional_fields"] = additional_fields
+        
+        results = await trace_search_tool.execute(arguments)
+        
+        if results and len(results) > 0:
+            return results[0].text
+        else:
+            return "No results returned from trace search"
+            
+    except Exception as e:
+        return f"Error executing trace search: {str(e)}"
+
+@mcp.tool()
+async def error_logs(
+    logs: List[Dict[str, Any]],
+    source: str = "unknown",
+    filter_level: str = "ERROR",
+    max_results: int = 100,
+    group_by: str = "none",
+    context: Context = None
+) -> str:
+    """Process and analyze error logs from various sources"""
+    try:
+        error_logs_tool = get_error_logs_tool()
+        arguments = {
+            "logs": logs,
+            "source": source,
+            "filter_level": filter_level,
+            "max_results": max_results,
+            "group_by": group_by
+        }
+        
+        results = await error_logs_tool.execute(arguments)
+        
+        if results and len(results) > 0:
+            return results[0].text
+        else:
+            return "No results returned from error logs processing"
+            
+    except Exception as e:
+        return f"Error processing error logs: {str(e)}"
+
 def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlette:
     sse = SseServerTransport("/messages")
     
@@ -522,6 +601,8 @@ def main():
     print(f"  - get_root_cause_identification_prompt: Get a ready-to-use prompt for root cause identification")
     print(f"  - splunk_log_analysis: Analyze Splunk logs for patterns and insights")
     print(f"  - get_splunk_query_prompt: Get a ready-to-use prompt for Splunk queries")
+    print(f"  - splunk_trace_search_by_ids: Search Splunk for traces by specific trace IDs")
+    print(f"  - error_logs: Process and analyze error logs from various sources")
     
     uvicorn.run(starlette_app, host="0.0.0.0", port=port)
 
