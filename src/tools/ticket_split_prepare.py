@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+from string import Template
 from typing import Dict, Any, List, Optional
 
 import structlog
@@ -23,8 +25,8 @@ class TicketSplitPrepareTool(BasePromptTool):
       - root_cause: JSON object (or JSON string) from root_cause_identification_prompt.
 
     Output:
-      - FINAL JSON ONLY: a list of ticket items (each item has type: "main" | "sub").
-      - No follow-on plan from this tool.
+      - FINAL JSON: a list of ticket items (each item has type: "main" | "sub").
+      - Plan to automated_issue_creation for creating actual issues from the ticket items.
     """
 
     def __init__(self):
@@ -33,9 +35,13 @@ class TicketSplitPrepareTool(BasePromptTool):
             description=(
                 "Create ticket-ready items by combining cross-service analysis with per-service root causes. "
                 "Emits a strict JSON list of items: one 'main' per trace (story + trace_id), and 'sub' per service with "
-                "analysis and root-cause details."
+                "analysis and root-cause details. Then chains to automated issue creation."
             ),
             prompt_filename="ticket_split_prepare.txt",
+        )
+        # Shared plan template: contains {{nextTool}}, {{argsJson}}, {{reason}}
+        self._plan_tpl = Template(
+            (Path(__file__).parent.parent / "prompts" / "shared_plan_template.txt").read_text(encoding="utf-8")
         )
 
     def get_tool_definition(self) -> Tool:
@@ -131,8 +137,30 @@ class TicketSplitPrepareTool(BasePromptTool):
                 if "service" not in item or "root_cause" not in item or "analysis" not in item:
                     return [TextContent(type="text", text=f"❌ Sub item {i} must include 'service', 'analysis', and 'root_cause'.")]
 
+        outputs: List[TextContent] = []
+
         # Everything looks good — emit machine-readable JSON
-        return [TextContent(type="json", text=json.dumps(parsed, ensure_ascii=False))]
+        outputs.append(TextContent(type="json", text=json.dumps(parsed, ensure_ascii=False)))
+
+        # Chain to automated issue creation
+        # Convert ticket items to format suitable for automated issue creation
+        next_args = {
+            "ticket_items": parsed,
+            "platform": "auto",  # Let automated_issue_creation choose the best platform
+            "group_similar_errors": True,
+            "severity_threshold": "medium",
+            "title_prefix": title_prefix if title_prefix else "Incident",
+            "custom_labels": ["ticket-split", "automated"]
+        }
+        
+        plan_json = self._plan_tpl.substitute(
+            nextTool="automated_issue_creation",
+            argsJson=json.dumps(next_args, ensure_ascii=False),
+            reason="Create actual issues from the prepared ticket items using automated issue creation with intelligent platform selection."
+        )
+        outputs.append(TextContent(type="text", text=plan_json))
+
+        return outputs
 
 
 # Global instance / exports
