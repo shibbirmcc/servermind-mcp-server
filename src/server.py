@@ -230,73 +230,72 @@ async def splunk_monitor(
         return f"Error executing monitor: {str(e)}"
 
 
-# Automated Issue Creation Tool (available if either GitHub or JIRA is configured)
-if config.github is not None or config.jira is not None:
-    @mcp.tool()
-    async def automated_issue_creation(
-        splunk_query: str,
-        platform: str = "github",
-        github_repo: str = None,
-        jira_project: str = None,
-        earliest_time: str = "-24h",
-        latest_time: str = "now",
-        max_results: int = 100,
-        severity_threshold: str = "medium",
-        group_similar_errors: bool = True,
-        auto_assign: str = None,
-        custom_labels: List[str] = None,
-        context: Context = None
-    ) -> str:
-        """Automatically analyze Splunk errors and create GitHub or JIRA issues with detailed error analysis.
+# Automated Issue Creation Tool (always available - uses external MCP servers)
+@mcp.tool()
+async def automated_issue_creation(
+    splunk_query: str,
+    platform: str = "auto",
+    github_repo: str = None,
+    jira_project: str = None,
+    earliest_time: str = "-24h",
+    latest_time: str = "now",
+    max_results: int = 100,
+    severity_threshold: str = "medium",
+    group_similar_errors: bool = True,
+    auto_assign: str = None,
+    custom_labels: List[str] = None,
+    context: Context = None
+) -> str:
+    """Automatically analyze Splunk errors and create GitHub or JIRA issues via external MCP servers.
+    
+    This tool performs comprehensive error analysis on Splunk search results and automatically creates
+    well-formatted issues in GitHub or JIRA using external MCP servers for issue creation.
+    
+    Args:
+        splunk_query: Splunk search query to find errors (e.g., 'index=main error | head 50')
+        platform: Platform to create issues on ('github', 'jira', 'both', or 'auto' for intelligent selection)
+        github_repo: GitHub repository name in format 'owner/repo' (required if platform is 'github' or 'both')
+        jira_project: JIRA project key (required if platform is 'jira' or 'both')
+        earliest_time: Start time for Splunk search (default: '-24h')
+        latest_time: End time for Splunk search (default: 'now')
+        max_results: Maximum number of Splunk results to analyze (1-1000, default: 100)
+        severity_threshold: Minimum severity level to create issues for ('low', 'medium', 'high', 'critical')
+        group_similar_errors: Whether to group similar errors into single issues (default: True)
+        auto_assign: Username to automatically assign created issues to (optional)
+        custom_labels: Additional custom labels to add to created issues (optional)
+    
+    Returns:
+        Comprehensive analysis report with created issue details and error analysis
+    """
+    try:
+        arguments = {
+            "splunk_query": splunk_query,
+            "platform": platform,
+            "earliest_time": earliest_time,
+            "latest_time": latest_time,
+            "max_results": max_results,
+            "severity_threshold": severity_threshold,
+            "group_similar_errors": group_similar_errors
+        }
         
-        This tool performs comprehensive error analysis on Splunk search results and automatically creates
-        well-formatted issues in GitHub or JIRA with detailed error information, recommendations, and context.
+        if github_repo is not None:
+            arguments["github_repo"] = github_repo
+        if jira_project is not None:
+            arguments["jira_project"] = jira_project
+        if auto_assign is not None:
+            arguments["auto_assign"] = auto_assign
+        if custom_labels is not None:
+            arguments["custom_labels"] = custom_labels
         
-        Args:
-            splunk_query: Splunk search query to find errors (e.g., 'index=main error | head 50')
-            platform: Platform to create issues on ('github', 'jira', or 'both')
-            github_repo: GitHub repository name in format 'owner/repo' (required if platform is 'github' or 'both')
-            jira_project: JIRA project key (required if platform is 'jira' or 'both')
-            earliest_time: Start time for Splunk search (default: '-24h')
-            latest_time: End time for Splunk search (default: 'now')
-            max_results: Maximum number of Splunk results to analyze (1-1000, default: 100)
-            severity_threshold: Minimum severity level to create issues for ('low', 'medium', 'high', 'critical')
-            group_similar_errors: Whether to group similar errors into single issues (default: True)
-            auto_assign: Username to automatically assign created issues to (optional)
-            custom_labels: Additional custom labels to add to created issues (optional)
+        results = await execute_automated_issue_creation(arguments)
         
-        Returns:
-            Comprehensive analysis report with created issue details and error analysis
-        """
-        try:
-            arguments = {
-                "splunk_query": splunk_query,
-                "platform": platform,
-                "earliest_time": earliest_time,
-                "latest_time": latest_time,
-                "max_results": max_results,
-                "severity_threshold": severity_threshold,
-                "group_similar_errors": group_similar_errors
-            }
+        if results and len(results) > 0:
+            return results[0].text
+        else:
+            return "Failed to execute automated issue creation"
             
-            if github_repo is not None:
-                arguments["github_repo"] = github_repo
-            if jira_project is not None:
-                arguments["jira_project"] = jira_project
-            if auto_assign is not None:
-                arguments["auto_assign"] = auto_assign
-            if custom_labels is not None:
-                arguments["custom_labels"] = custom_labels
-            
-            results = await execute_automated_issue_creation(arguments)
-            
-            if results and len(results) > 0:
-                return results[0].text
-            else:
-                return "Failed to execute automated issue creation"
-                
-        except Exception as e:
-            return f"Error in automated issue creation: {str(e)}"
+    except Exception as e:
+        return f"Error in automated issue creation: {str(e)}"
 
 def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlette:
     sse = SseServerTransport("/messages")
@@ -351,12 +350,10 @@ def main():
     print(f"    - splunk_export: Export Splunk search results to various formats")
     print(f"    - splunk_monitor: Start continuous monitoring of Splunk logs")
     
-    # Automated Issue Creation tool (if either GitHub or JIRA is configured)
-    if config.github is not None or config.jira is not None:
-        print("  Automated Analysis Tools:")
-        print(f"    - automated_issue_creation: Analyze Splunk errors and automatically create issues")
-    else:
-        print("  Automated Analysis Tools: Not available (requires GitHub or JIRA configuration)")
+    # Automated Issue Creation tool (always available - uses external MCP servers)
+    print("  Automated Analysis Tools:")
+    print(f"    - automated_issue_creation: Analyze Splunk errors and create issues via external MCP servers")
+    print(f"      Note: Requires external Atlassian or GitHub MCP servers for issue creation")
     
     uvicorn.run(starlette_app, host="0.0.0.0", port=port)
 

@@ -1,1 +1,0 @@
-"""JIRA integration module."""

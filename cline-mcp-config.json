@@ -5,6 +5,28 @@
       "timeout": 60,
       "type": "sse",
       "url": "http://127.0.0.1:8756/"
+    },
+    "atlassian-mcp-server": {
+      "disabled": false,
+      "timeout": 60,
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "mcp_atlassian.server"],
+      "env": {
+        "JIRA_URL": "https://your-domain.atlassian.net",
+        "JIRA_USERNAME": "your-email@example.com",
+        "JIRA_API_TOKEN": "your-jira-api-token"
+      }
+    },
+    "github-mcp-server": {
+      "disabled": false,
+      "timeout": 60,
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "your-github-token"
+      }
     }
   }
 }

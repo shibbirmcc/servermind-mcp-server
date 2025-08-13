@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ServerMind MCP Server - Flow Chart</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+        .flowchart {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            align-items: center;
+        }
+        .layer {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .box {
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            min-width: 200px;
+            color: white;
+            font-weight: bold;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .client { background-color: #f39c12; }
+        .transport { background-color: #3498db; }
+        .server { background-color: #2980b9; }
+        .tools { background-color: #27ae60; }
+        .integration { background-color: #16a085; }
+        .external { background-color: #e74c3c; }
+        .arrow {
+            font-size: 24px;
+            color: #9b59b6;
+            margin: 10px 0;
+        }
+        .layer-title {
+            background-color: #34495e;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 18px;
+            font-weight: bold;
+            width: 100%;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .description {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #ecf0f1;
+            border-radius: 8px;
+        }
+        .tool-details {
+            font-size: 12px;
+            margin-top: 5px;
+            opacity: 0.9;
+        }
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ServerMind MCP Server Architecture</h1>
+        
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color client"></div>
+                <span>MCP Clients</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color transport"></div>
+                <span>Transport & Server</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color tools"></div>
+                <span>Tools</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color integration"></div>
+                <span>Integration</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color external"></div>
+                <span>External Services</span>
+            </div>
+        </div>
+
+        <div class="flowchart">
+            <!-- MCP Clients -->
+            <div class="layer">
+                <div class="layer-title">MCP Clients</div>
+            </div>
+            <div class="layer">
+                <div class="box client">
+                    <div>AI Assistants</div>
+                    <div class="tool-details">Cline, Claude Desktop, Other MCP Clients</div>
+                </div>
+            </div>
+            
+            <div class="arrow">↓</div>
+            
+            <!-- Transport Layer -->
+            <div class="layer">
+                <div class="layer-title">Transport & Server Layer</div>
+            </div>
+            <div class="layer">
+                <div class="box transport">
+                    <div>Transport Layer</div>
+                    <div class="tool-details">SSE, HTTP, WebSocket</div>
+                </div>
+                <div class="box server">
+                    <div>FastMCP Server</div>
+                    <div class="tool-details">server.py (Port 8756)</div>
+                </div>
+                <div class="box server">
+                    <div>Configuration</div>
+                    <div class="tool-details">config.py, Environment Variables</div>
+                </div>
+            </div>
+            
+            <div class="arrow">↓</div>
+            
+            <!-- Tools Layer -->
+            <div class="layer">
+                <div class="layer-title">MCP Tools Layer</div>
+            </div>
+            <div class="layer">
+                <div class="box tools">
+                    <div>Splunk Tools</div>
+                    <div class="tool-details">
+                        • splunk_search<br>
+                        • splunk_indexes<br>
+                        • splunk_export<br>
+                        • splunk_monitor
+                    </div>
+                </div>
+                <div class="box tools">
+                    <div>JIRA Integration</div>
+                    <div class="tool-details">
+                        • Automated issue creation<br>
+                        • Intelligent platform selection<br>
+                        • Error analysis & correlation<br>
+                        <small>(uses jira_create_issue internally)</small>
+                    </div>
+                </div>
+                <div class="box tools">
+                    <div>GitHub Integration</div>
+                    <div class="tool-details">
+                        • Fallback issue creation<br>
+                        • Repository management<br>
+                        • Issue tracking support<br>
+                        <small>(uses github_create_issue internally)</small>
+                    </div>
+                </div>
+                <div class="box tools">
+                    <div>Automated Analysis</div>
+                    <div class="tool-details">
+                        • Cross-platform correlation<br>
+                        • Error pattern analysis<br>
+                        • Smart issue creation
+                    </div>
+                </div>
+            </div>
+            
+            <div class="arrow">↓</div>
+            
+            <!-- Integration Layer -->
+            <div class="layer">
+                <div class="layer-title">Client Integration Layer</div>
+            </div>
+            <div class="layer">
+                <div class="box integration">
+                    <div>Splunk Client</div>
+                    <div class="tool-details">
+                        • SPL Query Execution<br>
+                        • Index Management<br>
+                        • Real-time Monitoring
+                    </div>
+                </div>
+                <div class="box integration">
+                    <div>JIRA Client</div>
+                    <div class="tool-details">
+                        • JQL Query Processing<br>
+                        • Issue Management<br>
+                        • Project Operations
+                    </div>
+                </div>
+                <div class="box integration">
+                    <div>GitHub Client</div>
+                    <div class="tool-details">
+                        • Repository Management<br>
+                        • Issue Tracking<br>
+                        • PR Management
+                    </div>
+                </div>
+            </div>
+            
+            <div class="arrow">↓</div>
+            
+            <!-- External Services -->
+            <div class="layer">
+                <div class="layer-title">External Services</div>
+            </div>
+            <div class="layer">
+                <div class="box external">
+                    <div>Splunk Server</div>
+                    <div class="tool-details">
+                        • Log Data Storage<br>
+                        • Search Processing<br>
+                        • Port 8089 (HTTPS)
+                    </div>
+                </div>
+                <div class="box external">
+                    <div>JIRA Server</div>
+                    <div class="tool-details">
+                        • Issue Management<br>
+                        • Project Tracking<br>
+                        • REST API (HTTPS)
+                    </div>
+                </div>
+                <div class="box external">
+                    <div>GitHub API</div>
+                    <div class="tool-details">
+                        • Repository Data<br>
+                        • Issue Management<br>
+                        • api.github.com
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="description">
+            <h2>Architecture Overview</h2>
+            <p>The ServerMind MCP Server provides a unified interface for AI assistants to interact with enterprise systems through the Model Context Protocol (MCP).</p>
+            
+            <h3>Data Flow</h3>
+            <ol>
+                <li><strong>Request:</strong> MCP clients (like Cline) send tool requests via the transport layer</li>
+                <li><strong>Processing:</strong> FastMCP server routes requests to appropriate tool implementations</li>
+                <li><strong>Integration:</strong> Tools use service-specific clients to communicate with external APIs</li>
+                <li><strong>Response:</strong> Results are formatted and returned to the client</li>
+            </ol>
+            
+            <h3>Key Features</h3>
+            <ul>
+                <li><strong>Multi-Platform Integration:</strong> Connects Splunk, JIRA, and GitHub in one interface</li>
+                <li><strong>Automated Analysis:</strong> Cross-platform error correlation and intelligent issue creation</li>
+                <li><strong>Secure Configuration:</strong> Environment-based credential management</li>
+                <li><strong>Real-time Monitoring:</strong> Live data streaming and monitoring capabilities</li>
+                <li><strong>Modular Design:</strong> Services can be enabled/disabled based on configuration</li>
+            </ul>
+            
+            <h3>Primary Workflow</h3>
+            <p><strong>Automated Issue Creation:</strong> The main workflow uses the <code>automated_issue_creation</code> tool which:</p>
+            <ul>
+                <li>🔍 <strong>Analyzes Splunk errors</strong> using intelligent pattern recognition</li>
+                <li>🧠 <strong>Groups similar errors</strong> to avoid duplicate issues</li>
+                <li>🎯 <strong>Intelligently selects platforms</strong> (JIRA preferred, GitHub fallback)</li>
+                <li>📝 <strong>Creates detailed issues</strong> with error analysis, recommendations, and context</li>
+                <li>🏷️ <strong>Auto-assigns labels and priority</strong> based on error severity and type</li>
+            </ul>
+            
+            <h3>Supporting Tools</h3>
+            <ul>
+                <li><strong>Splunk Tools:</strong> Search execution, index management, data export, real-time monitoring</li>
+                <li><strong>JIRA Integration:</strong> Primary platform for automated issue creation with intelligent selection</li>
+                <li><strong>GitHub Integration:</strong> Fallback platform for issue creation and repository management</li>
+                <li><strong>Individual Tools:</strong> Available for specific use cases (github_repositories, github_issues, jira_search, etc.)</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

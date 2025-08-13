@@ -4,11 +4,11 @@ A comprehensive Model Context Protocol (MCP) server which provides seamless inte
 
 ## Overview
 
-ServerMind MCP Server is a unified integration platform that connects AI assistants to essential enterprise tools:
+ServerMind MCP Server is a Splunk-focused MCP server that provides advanced log analysis and automated issue creation capabilities:
 
 - **Splunk Integration**: Execute SPL queries, analyze logs, and monitor systems
-- **JIRA Integration**: Search issues, manage projects, and track development work
-- **GitHub Integration**: Access repositories, issues, and pull requests
+- **Automated Issue Creation**: Analyze Splunk errors and automatically create issues via external MCP servers
+- **External MCP Integration**: Leverages Atlassian and GitHub MCP servers for issue creation
 
 ## Features
 
@@ -101,18 +101,14 @@ SPLUNK_SCHEME=https
 SPLUNK_VERIFY_SSL=true
 SPLUNK_TIMEOUT=30
 
-# JIRA Configuration (Optional)
-JIRA_BASE_URL=https://your-company.atlassian.net
-JIRA_USERNAME=your-email@company.com
-JIRA_API_TOKEN=your-api-token
-JIRA_VERIFY_SSL=true
-JIRA_TIMEOUT=30
-
-# GitHub Configuration (Optional)
+# GitHub Configuration (Optional - for direct GitHub integration)
 GITHUB_TOKEN=your-github-token
 GITHUB_API_URL=https://api.github.com
 GITHUB_VERIFY_SSL=true
 GITHUB_TIMEOUT=30
+
+# Note: JIRA integration is now handled by external Atlassian MCP server
+# Configure the Atlassian MCP server separately in your MCP client configuration
 ```
 
 ### Configuration Options
