@@ -1,6 +1,7 @@
 """Search tool implementation for MCP."""
 
 from typing import Dict, Any, List, Optional
+import json
 import structlog
 from mcp.types import Tool, TextContent
 from ..splunk.client import SplunkClient, SplunkSearchError, SplunkConnectionError
@@ -58,6 +59,11 @@ class SplunkSearchTool:
                         "default": 300,
                         "minimum": 10,
                         "maximum": 3600
+                    },
+                    "raw_return": {
+                        "type": "boolean",
+                        "description": "If true, return raw JSON results for MCP chaining instead of human-readable format.",
+                        "default": False
                     }
                 },
                 "required": ["query"]
@@ -83,12 +89,14 @@ class SplunkSearchTool:
             latest_time = arguments.get("latest_time", "now")
             max_results = arguments.get("max_results", self.config.mcp.max_results_default)
             timeout = arguments.get("timeout", self.config.mcp.search_timeout)
+            raw_return = arguments.get("raw_return", False)
             
             logger.info("Executing Splunk search", 
                        query=query, 
                        earliest_time=earliest_time,
                        latest_time=latest_time,
-                       max_results=max_results)
+                       max_results=max_results,
+                       raw_return=raw_return)
             
             # Get client and execute search
             client = self.get_client()
@@ -103,7 +111,7 @@ class SplunkSearchTool:
             results = client.execute_search(query, **search_kwargs)
             
             # Format results for MCP response
-            return self._format_search_results(query, results, search_kwargs)
+            return self._format_search_results(query, results, search_kwargs, raw_return)
             
         except SplunkConnectionError as e:
             logger.error("Splunk connection error", error=str(e))
