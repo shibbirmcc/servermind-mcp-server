@@ -1,7 +1,27 @@
-# ... imports unchanged ...
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from string import Template
+from typing import Dict, Any, List
+import structlog
+from mcp.types import Tool, TextContent
+from .prompt import BasePromptTool
+
+logger = structlog.get_logger(__name__)
+
 
 class SplunkLogAnalysisPromptTool(BasePromptTool):
-    # __init__ and get_tool_definition unchanged, except inputSchema widened:
+    def __init__(self):
+        super().__init__(
+            tool_name="analyze_traces_narrative",
+            description="Analyze traces and generate narrative analysis with cross-service story and per-service breakdown",
+            prompt_filename="analyze_traces_narrative.txt"
+        )
+        # Load the plan template for chaining
+        self._plan_tpl_path = Path(__file__).parent.parent / "prompts" / "shared_plan_template.txt"
+        self._plan_tpl = Template(self._plan_tpl_path.read_text(encoding="utf-8"))
+
     def get_tool_definition(self) -> Tool:
         return Tool(
             name=self.tool_name,
@@ -102,3 +122,30 @@ class SplunkLogAnalysisPromptTool(BasePromptTool):
             return [{"id": args.get("id") or "unknown", "events": events}]
 
         return []
+
+
+# Global instance / exports
+_analyze_traces_narrative_tool = SplunkLogAnalysisPromptTool()
+
+def get_analyze_traces_narrative_tool() -> SplunkLogAnalysisPromptTool:
+    return _analyze_traces_narrative_tool
+
+def get_tool_definition() -> Tool:
+    return _analyze_traces_narrative_tool.get_tool_definition()
+
+async def execute_analyze_traces_narrative(arguments: Dict[str, Any]) -> List[TextContent]:
+    """
+    Expected args:
+      {
+        "traces": [{ id: string, events: array<object> }],  # preferred
+        "events": array<object>,                            # fallback for single trace
+        "id": string,                                       # optional id for single trace
+        "kind": string,                                     # if "data", may include traces wrapper
+        "mode": "auto|simple|full",                         # optional
+        "verbosity": "brief|normal|verbose"                 # optional
+      }
+    Returns:
+      - JSON (analysis results)
+      - Plan to `root_cause_identification_prompt` with analysis
+    """
+    return await _analyze_traces_narrative_tool.execute(arguments)

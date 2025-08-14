@@ -23,16 +23,21 @@ Design notes for splunk_error_search:
 
 from typing import Dict, Any, List
 import json
+from pathlib import Path
+from string import Template
 import structlog
 from mcp.types import Tool, TextContent
-from ..tools.splunk_search import execute_search
-from ..utils.plan_template import render_plan_template  # shared template renderer
+from .search import execute_search
 
 logger = structlog.get_logger(__name__)
 
 
 class SplunkErrorSearchTool:
     """MCP tool for finding recent error logs in given Splunk indices and chaining to grouping step."""
+
+    def __init__(self):
+        self._plan_tpl_path = Path(__file__).parent.parent / "prompts" / "shared_plan_template.txt"
+        self._plan_tpl = Template(self._plan_tpl_path.read_text(encoding="utf-8"))
 
     def get_tool_definition(self) -> Tool:
         return Tool(
@@ -137,9 +142,9 @@ class SplunkErrorSearchTool:
                 return [TextContent(type="text", text=msg)]
 
             # If found logs and invoked as part of chain → send plan for grouping
-            plan_text = render_plan_template(
-                next_tool="group_error_logs",
-                args={"logs": found_results["results"]},
+            plan_text = self._plan_tpl.substitute(
+                nextTool="group_error_logs",
+                argsJson=json.dumps({"logs": found_results["results"]}, ensure_ascii=False),
                 reason=f"Found error logs in the last {used_range[1:]} hours, proceed to group them by similarity."
             )
 

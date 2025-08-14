@@ -27,20 +27,11 @@ from src.config import get_config
 # Get configuration to determine server name
 config = get_config()
 server_name = config.mcp.server_name
-from src.tools.chain_1_prompt import get_chain_1_prompt_tool
-from src.tools.chain_2_prompt import get_chain_2_prompt_tool
-from src.tools.chain_3_prompt import get_chain_3_prompt_tool
-from src.tools.expand_fetch_by_traceids import get_expand_fetch_by_traceids_tool
-from src.tools.find_splunk_index_in_repo import get_find_splunk_index_in_repo_tool
-from src.tools.group_results_by_traceid import get_group_results_by_traceid_tool
 from src.tools.logs_debug_entry import get_logs_debug_entry_tool
-from src.tools.logs_evaluation_prompt import get_splunk_log_evaluation_tool
-from src.tools.resolve_splunk_index import get_resolve_splunk_index_tool
 from src.tools.root_cause_identification_prompt import get_root_cause_identification_prompt_tool
-from src.tools.splunk_log_analysis import get_splunk_log_analysis_prompt_tool
-from src.tools.splunk_query_prompt import get_splunk_query_prompt_tool
 from src.tools.splunk_trace_search_by_ids import get_splunk_trace_search_by_ids_tool
-from src.tools.error_logs import get_tool_definition as get_error_logs_tool
+from src.tools.splunk_error_search import get_tool_definition as get_error_logs_tool
+from src.tools.analyze_traces_narrative import get_analyze_traces_narrative_tool
 
 # Create FastMCP instance
 mcp = FastMCP(server_name)
@@ -388,6 +379,60 @@ async def error_logs(
     except Exception as e:
         return f"Error processing error logs: {str(e)}"
 
+@mcp.tool()
+async def analyze_traces_narrative(
+    traces: List[Dict[str, Any]] = None,
+    events: List[Dict[str, Any]] = None,
+    id: str = None,
+    kind: str = None,
+    mode: str = "auto",
+    verbosity: str = "normal",
+    context: Context = None
+) -> str:
+    """Analyze traces and generate narrative analysis with cross-service story and per-service breakdown.
+
+    This tool takes trace data and creates a comprehensive narrative analysis including:
+    - Cross-service story bullets showing the flow of events
+    - Per-service breakdown with detailed analysis
+    - Root cause identification preparation
+
+    Args:
+        traces: Preferred format - array of trace objects with id and events (e.g., [{"id": "trace1", "events": [...]}])
+        events: Fallback format - single trace's events array (will be wrapped into traces[0])
+        id: Optional id for the single-trace 'events' fallback
+        kind: If present and == 'data', may include 'traces' wrapper from previous step
+        mode: Analysis mode - 'auto' (adaptive), 'simple' (basic), or 'full' (comprehensive) (default: 'auto')
+        verbosity: Output verbosity - 'brief', 'normal', or 'verbose' (default: 'normal')
+
+    Returns:
+        JSON analysis with narrative story and service breakdown, plus plan for root cause identification
+    """
+    try:
+        analyze_tool = get_analyze_traces_narrative_tool()
+        arguments = {
+            "mode": mode,
+            "verbosity": verbosity
+        }
+        
+        if traces is not None:
+            arguments["traces"] = traces
+        if events is not None:
+            arguments["events"] = events
+        if id is not None:
+            arguments["id"] = id
+        if kind is not None:
+            arguments["kind"] = kind
+        
+        results = await analyze_tool.execute(arguments)
+        
+        if results and len(results) > 0:
+            return results[0].text
+        else:
+            return "No results returned from trace analysis"
+            
+    except Exception as e:
+        return f"Error analyzing traces: {str(e)}"
+
 def create_starlette_app(mcp_server: Server, *, debug: bool = False) -> Starlette:
     sse = SseServerTransport("/messages")
     
@@ -454,6 +499,7 @@ def main():
     print(f"  - get_splunk_query_prompt: Get a ready-to-use prompt for Splunk queries")
     print(f"  - splunk_trace_search_by_ids: Search Splunk for traces by specific trace IDs")
     print(f"  - error_logs: Process and analyze error logs from various sources")
+    print(f"  - analyze_traces_narrative: Generate narrative analysis with cross-service story and per-service breakdown")
     
     # Automated Issue Creation tool (always available - uses external MCP servers)
     print("  Automated Analysis Tools:")

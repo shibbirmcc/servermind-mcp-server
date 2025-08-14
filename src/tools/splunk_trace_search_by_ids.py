@@ -11,7 +11,7 @@ import structlog
 from mcp.types import Tool, TextContent
 
 # Reuse the generic search tool
-from ..tools.splunk_search import execute_search
+from .search import execute_search
 
 logger = structlog.get_logger(__name__)
 
@@ -39,7 +39,7 @@ class SplunkTraceSearchByIdsTool:
     """
 
     def __init__(self):
-        self._plan_tpl_path = Path(__file__).parent.parent / "shared_plan_template.txt"
+        self._plan_tpl_path = Path(__file__).parent.parent / "prompts" / "shared_plan_template.txt"
         self._plan_tpl = Template(self._plan_tpl_path.read_text(encoding="utf-8"))
 
     def get_tool_definition(self) -> Tool:
@@ -221,6 +221,10 @@ _tool = SplunkTraceSearchByIdsTool()
 
 def get_tool_definition() -> Tool:
     return _tool.get_tool_definition()
+
+def get_splunk_trace_search_by_ids_tool() -> SplunkTraceSearchByIdsTool:
+    """Get the global splunk trace search by ids tool instance."""
+    return _tool
 
 async def execute(arguments: Dict[str, Any]) -> List[TextContent]:
     return await _tool.execute(arguments)

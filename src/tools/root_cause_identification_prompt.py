@@ -43,7 +43,7 @@ class RootCauseIdentificationPromptTool(BasePromptTool):
         )
         # Shared plan template: contains {{nextTool}}, {{argsJson}}, {{reason}}
         self._plan_tpl = Template(
-            (Path(__file__).parent.parent / "shared_plan_template.txt").read_text(encoding="utf-8")
+            (Path(__file__).parent.parent / "prompts" / "shared_plan_template.txt").read_text(encoding="utf-8")
         )
 
     def get_tool_definition(self) -> Tool:

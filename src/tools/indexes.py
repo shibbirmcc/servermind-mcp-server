@@ -1,6 +1,7 @@
 """Index management tool implementation for MCP."""
 
 from typing import Dict, Any, List, Optional
+from pathlib import Path
 import structlog
 import json
 from string import Template
@@ -11,7 +12,7 @@ from ..config import get_config, Config
 logger = structlog.get_logger(__name__)
 
 PLAN_TEMPLATE = Template(
-    Path(__file__).parent.parent / "shared_plan_template.txt"
+    (Path(__file__).parent.parent / "prompts" / "shared_plan_template.txt")
         .read_text(encoding="utf-8")
 )
 
@@ -289,7 +290,6 @@ _indexes_tool = SplunkIndexesTool()
 
 def get_indexes_tool() -> SplunkIndexesTool:
     return _indexes_tool
-
 
 def get_tool_definition() -> Tool:
     return _indexes_tool.get_tool_definition()
