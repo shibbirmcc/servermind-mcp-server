@@ -1,6 +1,6 @@
 # Splunk MCP Server
 
-A Model Context Protocol (MCP) server that provides seamless integration with Splunk for log access, search, and analysis capabilities. This server enables AI assistants and other MCP clients to interact with Splunk instances, execute searches, and analyze log data.
+A Model Context Protocol (MCP) server which provides seamless integration with Splunk for log access, search, and analysis capabilities. This server enables AI assistants and other MCP clients to interact with Splunk instances, execute searches, and analyze log data.
 
 ## Overview
 
