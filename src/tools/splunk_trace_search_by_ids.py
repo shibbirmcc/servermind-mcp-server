@@ -106,8 +106,7 @@ class SplunkTraceSearchByIdsTool:
                     "query": spl,
                     "earliest_time": earliest,
                     "latest_time": latest,
-                    "max_results": max_results,
-                    "raw_return": True
+                    "max_results": max_results
                 })
                 if not content_list:
                     continue

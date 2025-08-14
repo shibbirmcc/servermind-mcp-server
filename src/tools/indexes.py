@@ -105,7 +105,7 @@ class SplunkIndexesTool:
 
             # Plan payload to hand over to Step 4
             plan_json = PLAN_TEMPLATE.substitute(
-                nextTool="splunk_error_query",  # Step 4 tool
+                nextTool="splunk_error_search",  # Step 4 tool
                 argsJson=json.dumps({"indices": index_names}, ensure_ascii=False),
                 reason="Indexes listed — proceed to build the ERROR-only Splunk query."
             )

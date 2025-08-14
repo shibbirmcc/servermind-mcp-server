@@ -32,20 +32,16 @@ class LogsDebugEntryTool(BasePromptTool):
         super().__init__(
             tool_name="get_logs_debug_entry",
             description=(
-    "On-ramp and gatekeeper for the log-based debugging chain. "
-    "Its sole job is to read the user's request and decide if BOTH are true: "
-    "1) something is wrong (anomaly/error/incident/unexpected behaviour), AND "
-    "2) the problem concerns a DEPLOYED environment (prod/staging/qa/uat/preprod/dev/canary/"
-    "preview/playground/sandbox/demo/beta or a custom named deployment). "
-    "Do NOT rely on repo files or env configs to infer deployment context—decide from the user's words. "
-    "If BOTH conditions appear true, proceed to the next step (e.g., list Splunk indices). "
-    "If either is missing, stop and give brief guidance (ask which deployed env, or suggest local repro). "
-    "Positive cues (deployed): mentions of prod/staging/qa/canary, clusters/pods/services, URLs, release tags, "
-    "on-call alerts, 5xx spikes, timeouts in ‘the site/app’. "
-    "Negative cues (local): phrases like ‘my test is failing’, ‘unit test fails’, ‘pytest/jest failure’, "
-    "‘docker-compose up’, ‘localhost’, ‘feature branch only’, or purely how-to questions. "
-    "Trigger on language like ‘check logs’, ‘debug’, ‘investigate’, ‘what’s wrong’, ‘anything strange’ "
-    "ONLY when it’s clearly about a deployed system."
+    "Entry point for logs debugging workflow. Minimal on-ramp that chains to splunk_indexes. "
+    "Use this tool when the user expresses ANY troubleshooting intent related to deployed environments. "
+    "Trigger phrases include: 'something is wrong', 'think there's an issue', 'investigate', 'debug', "
+    "'check logs', 'what's happening', 'errors in', 'problems with', 'issues in', 'look into', "
+    "'troubleshoot', 'analyze', or similar investigative language. "
+    "Environment indicators: prod, production, staging, qa, uat, preprod, dev, canary, preview, "
+    "playground, sandbox, demo, beta, or any custom environment names. "
+    "Examples: 'think something is wrong in staging', 'debug prod issues', 'check what's happening in qa', "
+    "'investigate errors in production', 'something seems off in the demo environment'. "
+    "This tool accepts any arguments and passes them through to the next step in the workflow."
 ),
             # No LLM prompt needed; we just render a plan.
             prompt_filename=None,

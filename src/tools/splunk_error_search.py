@@ -102,22 +102,21 @@ class SplunkErrorSearchTool:
 
                 logger.info("Running Splunk error search", query=spl, earliest_time=tr, latest_time=latest_time)
 
-                raw_results_content = await execute_search({
+                search_results_content = await execute_search({
                     "query": spl,
                     "earliest_time": tr,
                     "latest_time": latest_time,
-                    "max_results": max_results,
-                    "raw_return": True
+                    "max_results": max_results
                 })
 
-                if not raw_results_content:
+                if not search_results_content:
                     raise RuntimeError("Splunk search returned no content object.")
 
-                raw_payload = json.loads(raw_results_content[0].text)
-                results = raw_payload.get("results", [])
+                search_payload = json.loads(search_results_content[0].text)
+                results = search_payload.get("results", [])
 
                 if results:
-                    found_results = raw_payload
+                    found_results = search_payload
                     used_range = tr
                     break
 

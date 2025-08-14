@@ -37,7 +37,7 @@ class GroupErrorLogsTool(BasePromptTool):
             prompt_filename="group_error_logs_prompt.txt",
         )
         # Shared plan template for chaining
-        self._plan_template_path = Path(__file__).parent.parent / "shared_plan_template.txt"
+        self._plan_template_path = Path(__file__).parent.parent / "prompts" / "shared_plan_template.txt"
         self._plan_template = Template(self._plan_template_path.read_text(encoding="utf-8"))
 
     def get_tool_definition(self) -> Tool:
