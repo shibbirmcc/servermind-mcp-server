@@ -46,8 +46,8 @@ class SplunkIndexesTool:
         return Tool(
             name="splunk_indexes",
             description=(
-                "Step 2 in the log debug chain: lists Splunk indexes after environment check, "
-                "then auto-passes results to Step 4 (ERROR log query builder)."
+                "List available indexes (for exploring data structure before searching). "
+                "Step 2 in the log debug chain: lists Splunk indexes after environment check."
             ),
             inputSchema={
                 "type": "object",
@@ -103,11 +103,16 @@ class SplunkIndexesTool:
             # Prepare list of index names for Step 4
             index_names = [idx.get("name") for idx in indexes if "name" in idx]
 
-            # Plan payload to hand over to Step 4
+            # Plan payload to hand over to search tool
             plan_json = PLAN_TEMPLATE.substitute(
-                nextTool="splunk_error_search",  # Step 4 tool
-                argsJson=json.dumps({"indices": index_names}, ensure_ascii=False),
-                reason="Indexes listed — proceed to build the ERROR-only Splunk query."
+                nextTool="splunk_error_search",  # Jump directly to search tool
+                argsJson=json.dumps({
+                    "query": f"index={' OR index='.join(index_names)} | head 100",
+                    "earliest_time": "-24h",
+                    "latest_time": "now",
+                    "max_results": 100
+                }, ensure_ascii=False),
+                reason="Indexes listed — proceed to search across all available indexes."
             )
 
             formatted_results = self._format_indexes_results(indexes, filter_pattern, sort_by, sort_order)
@@ -165,6 +170,45 @@ class SplunkIndexesTool:
         else:
             return sorted(indexes, key=lambda x: str(x.get('name', '')), reverse=reverse)
 
+    def _determine_index_status(self, index: Dict[str, Any]) -> tuple[str, str]:
+        """Determine the actual status of an index based on multiple indicators.
+        
+        Returns:
+            tuple: (status_emoji, status_description)
+        """
+        name = index.get('name', 'Unknown')
+        events = 0
+        try:
+            events = index.get('total_event_count', 0)
+            if isinstance(events, str):
+                events = int(events) if events.isdigit() else 0
+        except (ValueError, TypeError):
+            events = 0
+        
+        earliest = index.get('earliest_time', 'N/A')
+        latest = index.get('latest_time', 'N/A')
+        disabled_flag = index.get('disabled', False)
+        
+        # Normalize None values to 'N/A' for consistent comparison
+        if earliest is None:
+            earliest = 'N/A'
+        if latest is None:
+            latest = 'N/A'
+        
+        # Determine status based on data presence and freshness, not just disabled flag
+        if events > 0 and latest not in ['N/A', 'None', None]:
+            # Index has data and time range - likely active
+            return "🟢", "Active"
+        elif events > 0:
+            # Has historical data but no clear time range
+            return "🟡", "Has Data"
+        elif disabled_flag and events == 0:
+            # Explicitly disabled and no data
+            return "🔴", "Disabled"
+        else:
+            # No data but not explicitly disabled - might be new/unused
+            return "⚪", "Empty"
+
     def _format_indexes_results(self, indexes: List[Dict[str, Any]], filter_pattern: Optional[str],
                                 sort_by: str, sort_order: str) -> List[TextContent]:
         index_count = len(indexes)
@@ -180,6 +224,8 @@ class SplunkIndexesTool:
 
         total_events = 0
         total_size_mb = 0.0
+        status_counts = {"Active": 0, "Has Data": 0, "Disabled": 0, "Empty": 0}
+        
         for idx in indexes:
             try:
                 events = idx.get('total_event_count', 0)
@@ -196,12 +242,18 @@ class SplunkIndexesTool:
                 total_size_mb += size
             except (ValueError, TypeError):
                 pass
+            
+            # Count status types
+            _, status_desc = self._determine_index_status(idx)
+            status_counts[status_desc] = status_counts.get(status_desc, 0) + 1
 
         formatted_results += f"**Summary Statistics:**\n"
         formatted_results += f"- Total Events: {total_events:,}\n"
         formatted_results += f"- Total Size: {total_size_mb:,.1f} MB ({total_size_mb/1024:.2f} GB)\n"
-        formatted_results += f"- Active Indexes: {len([idx for idx in indexes if not idx.get('disabled', False)])}\n"
-        formatted_results += f"- Disabled Indexes: {len([idx for idx in indexes if idx.get('disabled', False)])}\n\n"
+        formatted_results += f"- Active Indexes: {status_counts['Active']}\n"
+        formatted_results += f"- Indexes with Data: {status_counts['Has Data']}\n"
+        formatted_results += f"- Empty Indexes: {status_counts['Empty']}\n"
+        formatted_results += f"- Disabled Indexes: {status_counts['Disabled']}\n\n"
 
         for i, index in enumerate(indexes[:20], 1):
             name = index.get('name', 'Unknown')
@@ -221,9 +273,11 @@ class SplunkIndexesTool:
 
             earliest = index.get('earliest_time', 'N/A')
             latest = index.get('latest_time', 'N/A')
-            disabled = index.get('disabled', False)
             max_size = index.get('max_data_size', 'auto')
-            status = "🔴 Disabled" if disabled else "🟢 Active"
+            
+            # Use improved status determination
+            status_emoji, status_desc = self._determine_index_status(index)
+            status = f"{status_emoji} {status_desc}"
 
             formatted_results += f"**{i}. {name}** {status}\n"
             formatted_results += f"   - **Events:** {events:,}\n"

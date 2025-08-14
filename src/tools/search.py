@@ -25,8 +25,8 @@ class SplunkSearchTool:
         return Tool(
             name="splunk_search",
             description=(
-                "Execute a Splunk search query using SPL (Search Processing Language). "
-                "Returns structured JSON data suitable for tool chaining and programmatic use."
+                "Execute custom SPL queries directly (for advanced users who want to write their own SPL). "
+                "Use this when you need to run specific Splunk queries that aren't covered by specialized tools."
             ),
             inputSchema={
                 "type": "object",
@@ -152,6 +152,62 @@ class SplunkSearchTool:
 
 # Global search tool instance
 _search_tool = SplunkSearchTool()
+
+
+async def execute_splunk_query(query: str, earliest_time: str = "-24h", 
+                              latest_time: str = "now", max_results: int = 100, 
+                              timeout: int = 300) -> Dict[str, Any]:
+    """
+    Vanilla helper function for internal tool-to-tool search calls.
+    Returns raw dictionary instead of TextContent to avoid breaking chains.
+    
+    Args:
+        query: SPL query string
+        earliest_time: Start time for search
+        latest_time: End time for search  
+        max_results: Maximum number of results
+        timeout: Search timeout in seconds
+        
+    Returns:
+        Dict with 'results' and 'metadata' keys
+        
+    Raises:
+        Exception: If search fails
+    """
+    # Validate parameters
+    if not query or not isinstance(query, str):
+        raise ValueError("'query' must be a non-empty string")
+        
+    if max_results < 1 or max_results > 10000:
+        raise ValueError("max_results must be between 1 and 10000")
+        
+    if timeout < 10 or timeout > 3600:
+        raise ValueError("timeout must be between 10 and 3600 seconds")
+    
+    # Get client and execute search
+    client = _search_tool.get_client()
+    
+    search_kwargs = {
+        'earliest_time': earliest_time,
+        'latest_time': latest_time,
+        'max_results': max_results,
+        'timeout': timeout
+    }
+    
+    results = client.execute_search(query, **search_kwargs)
+    
+    # Return structured data
+    return {
+        "results": results,
+        "metadata": {
+            "query": query,
+            "earliest_time": earliest_time,
+            "latest_time": latest_time,
+            "result_count": len(results),
+            "max_results": max_results,
+            "timeout": timeout
+        }
+    }
 
 
 def get_search_tool() -> SplunkSearchTool:

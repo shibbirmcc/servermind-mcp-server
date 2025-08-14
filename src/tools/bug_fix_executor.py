@@ -87,53 +87,50 @@ class BugFixExecutorTool(BasePromptTool):
     
     async def execute(self, arguments: Dict[str, Any]) -> List[TextContent]:
         """Execute the bug fix executor tool."""
-        try:
-            logger.info("Starting bug fix execution", arguments=arguments)
-            
-            # Parse inputs
-            test_repro_data = self._parse_test_reproduction_output(arguments["test_reproduction_output"])
-            issue_data = self._parse_issue_reader_output(arguments["issue_reader_output"])
-            
-            if not test_repro_data or not issue_data:
-                return [TextContent(
-                    type="text",
-                    text="❌ **Invalid Input Data**\n\n"
-                         "Could not parse test reproduction or issue reader output. "
-                         "Please ensure both inputs contain valid JSON data."
-                )]
-            
-            # Extract configuration
-            service_paths = arguments.get("service_paths", [])
-            max_iterations = arguments.get("max_iterations", 5)
-            test_framework = arguments.get("test_framework", "auto")
-            fix_strategy = arguments.get("fix_strategy", "auto")
-            backup_code = arguments.get("backup_code", True)
-            
-            # Initialize fix session
-            fix_session = FixSession(
-                test_repro_data=test_repro_data,
-                issue_data=issue_data,
-                service_paths=service_paths,
-                max_iterations=max_iterations,
-                test_framework=test_framework,
-                fix_strategy=fix_strategy,
-                backup_code=backup_code
-            )
-            
-            # Execute the bug fixing workflow
-            results = await self._execute_fix_workflow(fix_session)
-            
-            # Generate comprehensive report
-            return self._generate_fix_report(results)
-            
-        except Exception as e:
-            logger.error("Error in bug fix executor", error=str(e))
+        # Validate required inputs
+        test_reproduction_output = arguments.get("test_reproduction_output")
+        issue_reader_output = arguments.get("issue_reader_output")
+        
+        if not test_reproduction_output or not issue_reader_output:
             return [TextContent(
                 type="text",
-                text=f"❌ **Bug Fix Execution Failed**\n\n"
-                     f"An error occurred during bug fixing: {e}\n\n"
-                     f"Please check your input parameters and try again."
+                text="❌ Both 'test_reproduction_output' and 'issue_reader_output' are required."
             )]
+        
+        # Get the bug fix executor prompt instructions (keep exactly as is)
+        prompt_instructions = self._get_prompt()
+        
+        # Add instruction to analyze the inputData
+        full_prompt = f"""{prompt_instructions}
+
+Please analyze the inputData below and provide bug fixes as specified above."""
+
+        # Prepare the next step args - this is typically the end of the chain
+        # but could potentially chain to deployment or monitoring tools
+        next_step_args = {
+            "deployment_target": "staging",
+            "run_integration_tests": True,
+            "notify_stakeholders": True
+        }
+        
+        # Construct JSON response using enhanced shared plan template
+        response_data = {
+            "kind": "plan",
+            "prompt": full_prompt,
+            "inputData": arguments,
+            "next": [
+                {
+                    "type": "completion",
+                    "message": "Bug fixing workflow completed. Review the fixes and deploy to production.",
+                    "args": next_step_args,
+                    "reason": "Bug fixing is typically the final step in the debugging workflow"
+                }
+            ],
+            "autoExecuteHint": False  # Don't auto-execute completion
+        }
+        response_json = json.dumps(response_data, indent=2)
+        
+        return [TextContent(type="text", text=response_json)]
     
     def _parse_test_reproduction_output(self, output: str) -> Optional[Dict[str, Any]]:
         """Parse test reproduction output."""
@@ -308,20 +305,27 @@ class BugFixExecutorTool(BasePromptTool):
                 "previous_iterations": []  # Could include previous attempts
             }
             
-            # Call the parent's execute method to use the LLM prompt
-            llm_outputs = await super().execute(context)
+            # Get the prompt template and format with input data
+            prompt_template = self._get_prompt()
             
-            if not llm_outputs or not getattr(llm_outputs[0], "text", None):
-                return None
+            # Format the prompt with the input data
+            formatted_prompt = f"""{prompt_template}
+
+## Input Data
+
+```json
+{json.dumps(context, indent=2, ensure_ascii=False)}
+```
+
+Please analyze the test failures above and provide bug fixes as specified in the prompt."""
             
-            raw_text = llm_outputs[0].text
-            
-            # Try to parse JSON response
-            try:
-                return json.loads(raw_text)
-            except json.JSONDecodeError:
-                logger.warning("LLM returned non-JSON response", response=raw_text)
-                return None
+            # For now, return a simple structure indicating that the prompt is ready
+            # In a real implementation, this would be processed by Cline
+            return {
+                "prompt_ready": True,
+                "formatted_prompt": formatted_prompt,
+                "fixes": []  # Empty fixes since we're not calling LLM directly
+            }
                 
         except Exception as e:
             logger.error("Error in LLM analysis", error=str(e))

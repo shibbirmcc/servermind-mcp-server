@@ -201,9 +201,8 @@ class SplunkMonitorTool:
         return Tool(
             name="splunk_monitor",
             description=(
-                "Start continuous monitoring of Splunk logs with specified intervals. "
-                "This tool creates a single monitoring session that runs in the background, "
-                "collecting logs at regular intervals and buffering results for analysis. "
+                "Set up continuous monitoring (for ongoing surveillance of specific queries). "
+                "Creates a background monitoring session that collects logs at regular intervals. "
                 "Only one monitoring session can be active at a time."
             ),
             inputSchema={

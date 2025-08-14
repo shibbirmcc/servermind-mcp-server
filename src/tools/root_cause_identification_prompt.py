@@ -93,43 +93,47 @@ class RootCauseIdentificationPromptTool(BasePromptTool):
         mode = arguments.get("mode", "auto")
         confidence_floor = float(arguments.get("confidence_floor", 0.6))
 
-        # 2) Invoke the prompt
-        llm_outputs = await super().execute({
+        # 2) Get the root cause identification prompt instructions (keep exactly as is)
+        prompt_instructions = self._get_prompt()
+        
+        # Add instruction to analyze the inputData
+        full_prompt = f"""{prompt_instructions}
+
+Please analyze the inputData below and provide the root cause identification as specified above."""
+
+        # Prepare the arguments for the prompt
+        prompt_arguments = {
             "analysis": analysis,
             "mode": mode,
             "confidence_floor": confidence_floor
-        })
-        if not llm_outputs or not getattr(llm_outputs[0], "text", None):
-            return [TextContent(type="text", text="❌ Root cause step produced no output.")]
-
-        raw_text = llm_outputs[0].text
-
-        outputs: List[TextContent] = []
-
-        # 3) Parse FINAL JSON; if parsing fails, return text only (no chain)
-        try:
-            root_cause = json.loads(raw_text)
-        except Exception:
-            logger.warning("Root-cause prompt returned non-JSON; passing through text (no plan).")
-            return [TextContent(type="text", text=raw_text)]
-
-        # 4) Emit machine-readable root cause JSON
-        outputs.append(TextContent(type="json", text=json.dumps(root_cause, ensure_ascii=False)))
-
-        # 5) Chain to ticket-prep step (service-level split → main/sub tickets)
-        #    Pass BOTH the original analysis and the computed root cause.
-        next_args = {
-            "analysis": analysis,
-            "root_cause": root_cause
         }
-        plan_json = self._plan_tpl.substitute(
-            nextTool="ticket_split_prepare",  # <--- change to your exact tool name if different
-            argsJson=json.dumps(next_args, ensure_ascii=False),
-            reason="Prepare main & sub tickets: main uses story per trace; sub tickets use per-service root causes."
-        )
-        outputs.append(TextContent(type="text", text=plan_json))
 
-        return outputs
+        # Prepare the next step args
+        next_step_args = {
+            "analysis": analysis,  # Pass through the original analysis
+            "root_cause": "{{RESULT_FROM_ROOT_CAUSE}}",  # Placeholder for root cause results
+            "title_prefix": "",
+            "mode": "auto"
+        }
+        
+        # Construct JSON response using enhanced shared plan template
+        response_data = {
+            "kind": "plan",
+            "prompt": full_prompt,
+            "inputData": prompt_arguments,
+            "next": [
+                {
+                    "type": "tool",
+                    "toolName": "ticket_split_prepare",
+                    "args": next_step_args,
+                    "reason": "Create ticket-ready items by combining cross-service analysis with per-service root causes"
+                }
+            ],
+            "autoExecuteHint": True
+        }
+        response_json = json.dumps(response_data, indent=2)
+        
+        return [TextContent(type="text", text=response_json)]
 
 
 # Global instance / exports

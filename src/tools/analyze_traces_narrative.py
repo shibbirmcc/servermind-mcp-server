@@ -78,26 +78,46 @@ class SplunkLogAnalysisPromptTool(BasePromptTool):
         mode = arguments.get("mode", "auto")
         verbosity = arguments.get("verbosity", "normal")
 
-        llm_outputs = await super().execute({"traces": traces, "mode": mode, "verbosity": verbosity})
-        if not llm_outputs or not getattr(llm_outputs[0], "text", None):
-            return [TextContent(type="text", text="❌ Analysis step produced no output.")]
+        # Get the trace analysis prompt instructions (keep exactly as is)
+        prompt_instructions = self._get_prompt()
+        
+        # Add instruction to analyze the inputData
+        full_prompt = f"""{prompt_instructions}
 
-        raw_text = llm_outputs[0].text
-        try:
-            parsed = json.loads(raw_text)
-        except Exception:
-            logger.warning("Analyzer returned non-JSON; passing through text.")
-            return [TextContent(type="text", text=raw_text)]
+Please analyze the inputData below and provide the narrative analysis as specified above."""
 
-        outputs: List[TextContent] = [TextContent(type="json", text=json.dumps(parsed, ensure_ascii=False))]
+        # Prepare the arguments for the prompt
+        prompt_arguments = {
+            "traces": traces,
+            "mode": mode,
+            "verbosity": verbosity
+        }
 
-        plan_json = self._plan_tpl.substitute(
-            nextTool="root_cause_identification_prompt",
-            argsJson=json.dumps({"analysis": parsed}, ensure_ascii=False),
-            reason="Use the narrated story and per-service breakdown to confirm root cause(s)."
-        )
-        outputs.append(TextContent(type="text", text=plan_json))
-        return outputs
+        # Prepare the next step args
+        next_step_args = {
+            "analysis": "{{RESULT_FROM_ANALYSIS}}",  # Placeholder for analysis results
+            "mode": "auto",
+            "confidence_floor": 0.6
+        }
+        
+        # Construct JSON response using enhanced shared plan template
+        response_data = {
+            "kind": "plan",
+            "prompt": full_prompt,
+            "inputData": prompt_arguments,
+            "next": [
+                {
+                    "type": "tool",
+                    "toolName": "root_cause_identification_prompt",
+                    "args": next_step_args,
+                    "reason": "Confirm service-level root causes based on narrative analysis and prepare for ticket creation"
+                }
+            ],
+            "autoExecuteHint": True
+        }
+        response_json = json.dumps(response_data, indent=2)
+        
+        return [TextContent(type="text", text=response_json)]
 
     # --- helpers ---
     def _coerce_to_traces(self, args: Dict[str, Any]) -> List[Dict[str, Any]]:

@@ -1,5 +1,7 @@
 {
   "kind": "plan",
+  "prompt": "{{promptInstructions}}",
+  "inputData": {{inputDataJson}},
   "next": [
     {
       "type": "tool",

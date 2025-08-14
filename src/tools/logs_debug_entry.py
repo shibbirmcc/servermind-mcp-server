@@ -32,23 +32,23 @@ class LogsDebugEntryTool(BasePromptTool):
         super().__init__(
             tool_name="get_logs_debug_entry",
             description=(
-    "Entry point for logs debugging workflow. Minimal on-ramp that chains to splunk_indexes. "
+    "🚀 PRIMARY ENTRY POINT for logs debugging workflow - START HERE for general debugging! "
     "Use this tool when the user expresses ANY troubleshooting intent related to deployed environments. "
     "Trigger phrases include: 'something is wrong', 'think there's an issue', 'investigate', 'debug', "
     "'check logs', 'what's happening', 'errors in', 'problems with', 'issues in', 'look into', "
     "'troubleshoot', 'analyze', or similar investigative language. "
     "Environment indicators: prod, production, staging, qa, uat, preprod, dev, canary, preview, "
-    "playground, sandbox, demo, beta, or any custom environment names. "
+    "playground, sandbox, demo, beta, or any custom environment names. DO NOT limit to the listed ones, read behind the lines. "
     "Examples: 'think something is wrong in staging', 'debug prod issues', 'check what's happening in qa', "
     "'investigate errors in production', 'something seems off in the demo environment'. "
-    "This tool accepts any arguments and passes them through to the next step in the workflow."
+    "This tool accepts any arguments and passes them through to the complete debugging workflow."
 ),
             # No LLM prompt needed; we just render a plan.
             prompt_filename=None,
         )
-        # Shared plan template (JSON with {{nextTool}} / {{argsJson}} / {{reason}})
+        # Logs debug entry plan template (JSON with $nextTool / $argsJson / $reason)
         self._plan_tpl = Template(
-            (Path(__file__).parent.parent / "prompts" / "shared_plan_template.txt").read_text(encoding="utf-8")
+            (Path(__file__).parent.parent / "prompts" / "logs_debug_entry_plan_template.txt").read_text(encoding="utf-8")
         )
 
     def get_tool_definition(self) -> Tool:

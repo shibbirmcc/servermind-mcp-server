@@ -27,7 +27,7 @@ from pathlib import Path
 from string import Template
 import structlog
 from mcp.types import Tool, TextContent
-from .search import execute_search
+from .search import execute_splunk_query
 
 logger = structlog.get_logger(__name__)
 
@@ -43,9 +43,8 @@ class SplunkErrorSearchTool:
         return Tool(
             name="splunk_error_search",
             description=(
-                "Search Splunk for logs containing 'ERROR' or 'error' in one or more indices. "
-                "If no earliest_time is provided, automatically broadens search up to 3 days. "
-                "If still no results, returns a detailed no-results summary."
+                "Direct error search in specific indexes (when you know exact indexes to search). "
+                "Searches for 'ERROR' or 'error' logs with auto-broadening time ranges if needed."
             ),
             inputSchema={
                 "type": "object",
@@ -102,17 +101,13 @@ class SplunkErrorSearchTool:
 
                 logger.info("Running Splunk error search", query=spl, earliest_time=tr, latest_time=latest_time)
 
-                search_results_content = await execute_search({
-                    "query": spl,
-                    "earliest_time": tr,
-                    "latest_time": latest_time,
-                    "max_results": max_results
-                })
+                search_payload = await execute_splunk_query(
+                    query=spl,
+                    earliest_time=tr,
+                    latest_time=latest_time,
+                    max_results=max_results
+                )
 
-                if not search_results_content:
-                    raise RuntimeError("Splunk search returned no content object.")
-
-                search_payload = json.loads(search_results_content[0].text)
                 results = search_payload.get("results", [])
 
                 if results:
@@ -148,8 +143,8 @@ class SplunkErrorSearchTool:
             )
 
             return [
-                TextContent(type="json", text=json.dumps(found_results)),  # raw logs
-                TextContent(type="json", text=plan_text)                  # plan to next step
+                TextContent(type="text", text=f"JSON_OUTPUT:\n{json.dumps(found_results)}"),  # raw logs
+                TextContent(type="text", text=plan_text)                  # plan to next step
             ]
 
         except Exception as e:

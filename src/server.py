@@ -35,7 +35,8 @@ from src.tools.root_cause_identification_prompt import get_root_cause_identifica
 from src.tools.splunk_trace_search_by_ids import get_splunk_trace_search_by_ids_tool
 from src.tools.splunk_error_search import get_tool_definition as get_error_logs_tool, execute as execute_splunk_error_search
 from src.tools.analyze_traces_narrative import get_analyze_traces_narrative_tool
-from src.tools.group_error_logs_prompt import get_tool_definition as get_group_error_logs_tool
+from src.tools.group_error_logs_prompt import get_tool_definition as get_group_error_logs_tool, execute as execute_group_error_logs
+from src.tools.extract_trace_ids_for_search import get_tool_definition as get_extract_trace_ids_tool, execute as execute_extract_trace_ids
 from src.tools.ticket_split_prepare import get_tool_definition as get_ticket_split_prepare_tool
 
 # Create FastMCP instance
@@ -328,21 +329,16 @@ async def splunk_trace_search_by_ids(
     """
     try:
         trace_search_tool = get_splunk_trace_search_by_ids_tool()
+        # Only pass parameters that the underlying tool expects
         arguments = {
-            "trace_ids": trace_ids,
-            "trace_id_field": trace_id_field,
+            "ids": trace_ids,
             "earliest_time": earliest_time,
             "latest_time": latest_time,
-            "max_results": max_results,
-            "timeout": timeout,
-            "include_raw": include_raw,
-            "sort_by_time": sort_by_time
+            "max_results": max_results
         }
         
         if indexes is not None:
-            arguments["indexes"] = indexes
-        if additional_fields is not None:
-            arguments["additional_fields"] = additional_fields
+            arguments["indices"] = indexes  # Note: "indices" not "indexes"
         
         results = await trace_search_tool.execute(arguments)
         
@@ -474,10 +470,17 @@ async def logs_debug_entry(
     context: Context = None,
     **kwargs
 ) -> str:
-    """Entry point for logs debugging workflow. Minimal on-ramp that chains to splunk_indexes.
+    """🚀 PRIMARY ENTRY POINT for debugging issues like 'something is wrong in staging'.
     
-    This tool serves as the gateway into the log-based debugging chain. It accepts any arguments
-    and passes them through to the next step in the workflow.
+    This is the recommended starting point for any general debugging scenario. It automatically
+    guides you through the complete debugging workflow: discovering indexes → finding errors → 
+    analyzing traces → identifying root causes → creating tickets.
+    
+    Use this when you have general issues like:
+    - 'Something is wrong in staging'
+    - 'Users are reporting errors'  
+    - 'Service seems to be failing'
+    - Any debugging scenario where you need to investigate problems
     """
     try:
         logs_debug_tool = get_logs_debug_entry_tool()
@@ -507,13 +510,12 @@ async def group_error_logs(
         Grouped error logs with representative IDs and plan for next step
     """
     try:
-        group_tool = get_group_error_logs_tool()
         arguments = {
             "logs": logs,
             "max_groups": max_groups
         }
         
-        results = await group_tool.execute(arguments)
+        results = await execute_group_error_logs(arguments)
         
         if results and len(results) > 0:
             return results[0].text
@@ -522,6 +524,47 @@ async def group_error_logs(
             
     except Exception as e:
         return f"Error grouping error logs: {str(e)}"
+
+@mcp.tool()
+async def extract_trace_ids_for_search(
+    grouped_logs: str,
+    deduplicate: bool = True,
+    earliest_time: str = "-24h",
+    latest_time: str = "now",
+    max_results: int = 4000,
+    context: Context = None
+) -> str:
+    """Extract trace/correlation IDs from grouped error logs output and prepare 
+    the next step to fetch full traces via splunk_trace_search_by_ids.
+    
+    Args:
+        grouped_logs: JSON string output from group_error_logs containing grouped error patterns with chosen_id values
+        deduplicate: Whether to remove duplicate trace IDs (default: true)
+        earliest_time: Start time for trace search (default: -24h)
+        latest_time: End time for trace search (default: now)
+        max_results: Maximum results per trace search (default: 4000)
+    
+    Returns:
+        Plan to call splunk_trace_search_by_ids with extracted trace IDs
+    """
+    try:
+        arguments = {
+            "grouped_logs": grouped_logs,
+            "deduplicate": deduplicate,
+            "earliest_time": earliest_time,
+            "latest_time": latest_time,
+            "max_results": max_results
+        }
+        
+        results = await execute_extract_trace_ids(arguments)
+        
+        if results and len(results) > 0:
+            return results[0].text
+        else:
+            return "No results returned from trace ID extraction"
+            
+    except Exception as e:
+        return f"Error extracting trace IDs: {str(e)}"
 
 @mcp.tool()
 async def root_cause_identification_prompt(
@@ -807,17 +850,18 @@ def main():
 
     # Splunk tools (always available)
     print("  Core Splunk Tools:")
-    print(f"    - splunk_search: Execute Splunk search queries")
-    print(f"    - splunk_indexes: List available Splunk indexes")
-    print(f"    - splunk_error_search: Search for ERROR logs with auto-broadening time ranges")
-    print(f"    - splunk_export: Export Splunk search results to various formats")
-    print(f"    - splunk_monitor: Start continuous monitoring of Splunk logs")
-    print(f"    - splunk_trace_search_by_ids: Search Splunk for traces by specific trace IDs")
-    print(f"    - error_logs: Process and analyze error logs from various sources")
+    print(f"    - splunk_search: Execute custom SPL queries (for advanced users with specific search needs)")
+    print(f"    - splunk_indexes: List available indexes (for exploring data structure before searching)")
+    print(f"    - splunk_error_search: Direct error search in specific indexes (when you know exact indexes to search)")
+    print(f"    - splunk_export: Export search results to files (for data analysis and reporting)")
+    print(f"    - splunk_monitor: Set up continuous monitoring (for ongoing surveillance of specific queries)")
+    print(f"    - splunk_trace_search_by_ids: Search by known trace IDs (when you have specific trace identifiers)")
+    print(f"    - error_logs: Process pre-retrieved log data (for analyzing logs already collected)")
     
     print("  Analysis & Workflow Tools:")
-    print(f"    - logs_debug_entry: Entry point for logs debugging workflow")
+    print(f"    - logs_debug_entry: 🚀 START HERE for general debugging (e.g., 'something is wrong in staging')")
     print(f"    - group_error_logs: Group ERROR logs into semantic clusters")
+    print(f"    - extract_trace_ids_for_search: Extract trace IDs from grouped logs and prepare for trace search")
     print(f"    - analyze_traces_narrative: Generate narrative analysis with cross-service story")
     print(f"    - root_cause_identification_prompt: Confirm service-level root causes")
     print(f"    - ticket_split_prepare: Create ticket-ready items from analysis")

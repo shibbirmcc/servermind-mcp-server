@@ -98,69 +98,51 @@ class TicketSplitPrepareTool(BasePromptTool):
         title_prefix = arguments.get("title_prefix", "")
         mode = arguments.get("mode", "auto")
 
-        # Call LLM with normalized inputs
-        llm_outputs = await super().execute({
+        # Get the ticket split preparation prompt instructions (keep exactly as is)
+        prompt_instructions = self._get_prompt()
+        
+        # Add instruction to analyze the inputData
+        full_prompt = f"""{prompt_instructions}
+
+Please analyze the inputData below and provide the ticket split preparation as specified above."""
+
+        # Prepare the arguments for the prompt
+        prompt_arguments = {
             "analysis": analysis,
             "root_cause": root_cause,
             "title_prefix": title_prefix,
             "mode": mode
-        })
-        if not llm_outputs or not getattr(llm_outputs[0], "text", None):
-            return [TextContent(type="text", text="❌ Ticket split step produced no output.")]
+        }
 
-        raw = llm_outputs[0].text
-
-        # Strict parse & shape validation: must be a LIST of ticket items
-        try:
-            parsed = json.loads(raw)
-        except Exception:
-            logger.warning("ticket_split_prepare returned non-JSON.")
-            return [TextContent(type="text", text="❌ Expected FINAL JSON list, but received non-JSON output.")]
-
-        # Validate top-level list
-        if not isinstance(parsed, list):
-            return [TextContent(type="text", text="❌ Expected a JSON array of ticket items as the top-level value.")]
-
-        # Validate each item has minimal required fields based on type
-        for i, item in enumerate(parsed):
-            if not isinstance(item, dict):
-                return [TextContent(type="text", text=f"❌ Item {i} is not an object.")]
-            typ = item.get("type")
-            if typ not in ("main", "sub"):
-                return [TextContent(type="text", text=f"❌ Item {i} missing or invalid 'type' ('main'|'sub').")]
-            if typ == "main":
-                if "trace_id" not in item or "story" not in item:
-                    return [TextContent(type="text", text=f"❌ Main item {i} must include 'trace_id' and 'story'.")]
-                if not isinstance(item["story"], list):
-                    return [TextContent(type="text", text=f"❌ Main item {i} 'story' must be an array of bullets.")]
-            if typ == "sub":
-                if "service" not in item or "root_cause" not in item or "analysis" not in item:
-                    return [TextContent(type="text", text=f"❌ Sub item {i} must include 'service', 'analysis', and 'root_cause'.")]
-
-        outputs: List[TextContent] = []
-
-        # Everything looks good — emit machine-readable JSON
-        outputs.append(TextContent(type="json", text=json.dumps(parsed, ensure_ascii=False)))
-
-        # Chain to automated issue creation
-        # Convert ticket items to format suitable for automated issue creation
-        next_args = {
-            "ticket_items": parsed,
-            "platform": "auto",  # Let automated_issue_creation choose the best platform
-            "group_similar_errors": True,
+        # Prepare the next step args
+        next_step_args = {
+            "splunk_query": "index=main error",  # Default query, will be refined based on ticket content
+            "platform": "auto",
+            "earliest_time": "-24h",
+            "latest_time": "now",
+            "max_results": 100,
             "severity_threshold": "medium",
-            "title_prefix": title_prefix if title_prefix else "Incident",
-            "custom_labels": ["ticket-split", "automated"]
+            "group_similar_errors": True
         }
         
-        plan_json = self._plan_tpl.substitute(
-            nextTool="automated_issue_creation",
-            argsJson=json.dumps(next_args, ensure_ascii=False),
-            reason="Create actual issues from the prepared ticket items using automated issue creation with intelligent platform selection."
-        )
-        outputs.append(TextContent(type="text", text=plan_json))
-
-        return outputs
+        # Construct JSON response using enhanced shared plan template
+        response_data = {
+            "kind": "plan",
+            "prompt": full_prompt,
+            "inputData": prompt_arguments,
+            "next": [
+                {
+                    "type": "tool",
+                    "toolName": "automated_issue_creation",
+                    "args": next_step_args,
+                    "reason": "Automatically analyze ticket items and create GitHub or JIRA issues via external MCP servers"
+                }
+            ],
+            "autoExecuteHint": True
+        }
+        response_json = json.dumps(response_data, indent=2)
+        
+        return [TextContent(type="text", text=response_json)]
 
 
 # Global instance / exports

@@ -11,7 +11,7 @@ import structlog
 from mcp.types import Tool, TextContent
 
 # Reuse the generic search tool
-from .search import execute_search
+from .search import execute_splunk_query
 
 logger = structlog.get_logger(__name__)
 
@@ -102,15 +102,12 @@ class SplunkTraceSearchByIdsTool:
             for chunk in id_chunks:
                 spl = self._build_trace_spl(chunk, indices)
                 logger.info("Trace search chunk", ids=len(chunk), earliest=earliest, latest=latest)
-                content_list = await execute_search({
-                    "query": spl,
-                    "earliest_time": earliest,
-                    "latest_time": latest,
-                    "max_results": max_results
-                })
-                if not content_list:
-                    continue
-                payload = json.loads(content_list[0].text)
+                payload = await execute_splunk_query(
+                    query=spl,
+                    earliest_time=earliest,
+                    latest_time=latest,
+                    max_results=max_results
+                )
                 events = payload.get("results", []) or []
                 all_events.extend(events)
 
@@ -119,7 +116,8 @@ class SplunkTraceSearchByIdsTool:
 
             # Machine-readable block
             data = {"kind": "data", "earliest_time": earliest, "latest_time": latest, "traces": traces}
-            outputs: List[TextContent] = [TextContent(type="json", text=json.dumps(data, ensure_ascii=False))]
+            json_output = json.dumps(data, ensure_ascii=False)
+            outputs: List[TextContent] = [TextContent(type="text", text=f"JSON_OUTPUT:\n{json_output}")]
 
             if not traces or all(len(t.get("events", [])) == 0 for t in traces):
                 # Nothing to analyze; inform upstream clearly.
