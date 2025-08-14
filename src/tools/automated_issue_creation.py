@@ -1,7 +1,6 @@
 """Automated issue creation tool for MCP - creates issues from error analysis."""
 
 import re
-import json
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 import structlog
