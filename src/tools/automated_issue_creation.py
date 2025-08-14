@@ -270,33 +270,6 @@ class AutomatedIssueCreationTool:
         
         return selected_platforms
     
-    async def _test_jira_connectivity(self) -> bool:
-        """Test JIRA connectivity and accessibility."""
-        try:
-            if not self.config.jira:
-                return False
-            
-            # Since we're using MCP servers now, we assume connectivity if config exists
-            # The actual connectivity will be tested when creating issues
-            return True
-            
-        except Exception as e:
-            logger.error("JIRA connectivity test failed", error=str(e))
-            return False
-    
-    async def _test_github_connectivity(self) -> bool:
-        """Test GitHub connectivity and accessibility."""
-        try:
-            if not self.config.github:
-                return False
-            
-            # Since we're using MCP servers now, we assume connectivity if config exists
-            # The actual connectivity will be tested when creating issues
-            return True
-            
-        except Exception as e:
-            logger.error("GitHub connectivity test failed", error=str(e))
-            return False
     
     async def _execute_splunk_search(self, query: str, earliest_time: str,
                                    latest_time: str, max_results: int) -> List[Dict[str, Any]]:

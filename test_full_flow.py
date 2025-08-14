@@ -18,13 +18,9 @@ async def test_full_flow():
     print("🚀 Testing Servermind MCP Server Full Flow...")
     print("=" * 60)
     
-    # Set test environment variables
-    os.environ.update({
-        'SPLUNK_HOST': 'test-host',
-        'SPLUNK_USERNAME': 'test-user',
-        'SPLUNK_PASSWORD': 'test-pass',
-        'SPLUNK_VERIFY_SSL': 'false'
-    })
+    # Use shared test environment setup
+    from test_hierarchical_issues import setup_test_environment
+    setup_test_environment()
     
     # Test 1: Configuration Loading
     print("\n📋 Test 1: Configuration Loading")
