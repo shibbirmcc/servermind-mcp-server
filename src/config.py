@@ -25,10 +25,13 @@ class SplunkConfig:
 @dataclass
 class MCPConfig:
     """MCP server configuration."""
-    server_name: str = "splunk-mcp-server"
+    server_name: str = "servermind-mcp-server"
     version: str = "1.0.0"
     max_results_default: int = 100
     search_timeout: int = 300
+    # External MCP servers
+    atlassian_server_name: str = "atlassian-mcp-server"
+    github_server_name: str = "github-mcp-server"
 
 
 @dataclass
@@ -113,7 +116,10 @@ class ConfigLoader:
             search_timeout=search_timeout
         )
         
-        return Config(splunk=splunk_config, mcp=mcp_config)
+        return Config(
+            splunk=splunk_config,
+            mcp=mcp_config
+        )
     
     def _get_int_env(self, env_var: str, default: int) -> int:
         """Get integer value from environment variable with default."""

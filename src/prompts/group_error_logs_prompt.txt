@@ -1,0 +1,107 @@
+You are given raw ERROR log messages as strings.
+
+Goal
+Group log messages by their semantices, focus on message field if any, not exact text, and for each group select ONE representative trace/correlation ID to follow up with in the next step.
+
+CRITICAL WORKFLOW REQUIREMENT: You MUST extract trace/correlation IDs to continue to splunk_trace_search_by_ids. The debugging workflow depends on this step succeeding.
+
+Step 0 — Input shape and pre-filtering
+- Input is a JSON array of raw log message strings.
+- Each string contains the complete log message content.
+- PRIORITY FILTERING: Log messages containing "trace_context_found": true get highest priority for ID extraction and grouping.
+
+Step 1 — Find trace/correlation IDs in log messages - MANDATORY SUCCESS
+1) PRIORITY BOOST: Log messages containing "trace_context_found": true get 2x weight in ID extraction
+2) PRIMARY distributed tracing patterns (case/underscore-insensitive, highest priority):
+   - "trace_id": "value", "traceId": "value", "traceID": "value"
+   - "span_id": "value", "spanId": "value", "parent_span_id": "value", "parentSpanId": "value"
+3) SECONDARY correlation patterns (case/underscore-insensitive):
+   - "correlationId": "value", "correlation_id": "value"
+   - "requestId": "value", "request_id": "value"
+   - "x-b3-traceid": "value", "b3TraceId": "value", "x-trace-id": "value"
+4) PATTERN-BASED detection - scan log message content for values matching:
+   - 32-char hex string (OpenTelemetry trace ID): exactly 32 hex chars
+   - 16-char hex string (span ID): exactly 16 hex chars  
+   - UUID format: 8-4-4-4-12 hex (case-insensitive)
+   - Long hex string: ≥12 hex chars, no spaces
+   - Alphanumeric token: ≥8 chars, no spaces
+5) REGEX SEARCH - Enhanced patterns for log message content:
+   - trace[_-]?id[=:]\s*([a-f0-9]{32}|[a-f0-9]{16}|\S{8,})
+   - span[_-]?id[=:]\s*([a-f0-9]{16}|\S{8,})
+   - correlation[_-]?id[=:]\s*(\S{8,})
+   - request[_-]?id[=:]\s*(\S{8,})
+   - "trace_id"\s*:\s*"([^"]+)"
+   - Any JSON-embedded trace fields within log messages
+6) ID selection priority (choose the BEST available):
+   - Log messages with "trace_context_found": true (highest priority)
+   - trace_id with 32-char hex values
+   - span_id or parent_span_id with 16-char hex values
+   - Any correlation field with consistent format
+   - IDs extracted from regex patterns
+   - Highest coverage across log messages (presence %)
+   - Tie-breaker: highest number of unique values
+7) MANDATORY: You MUST find at least one usable ID. If standard patterns aren't found, be creative:
+   - Look for any JSON field ending in "_id" or "Id"
+   - Check for fields with "trace", "span", "correlation", "request" in the name
+   - Use ANY pattern with hex-like or UUID-like values
+   - Extract IDs from URL parameters in logs (e.g., ?traceId=abc123)
+   - Parse JSON objects embedded in log messages
+   - Even imperfect IDs are better than stopping the workflow
+
+Step 2 — Build a normalized message for semantic grouping
+For each raw log message string, derive a normalized message template:
+- Lowercase the entire log message.
+- Strip timestamps and ISO datetimes.
+- Replace IDs (UUIDs, long hex, 12+ alnum) with the token "<ID>".
+- Replace numbers (ints/floats), emails, IP addresses, and quoted tokens with "<VAL>".
+- Collapse whitespace and punctuation runs.
+This yields a message "template" that generalizes variable parts, e.g.:
+  "failed to update person <VAL>"  (covers "failed to update person ABC/BCD/...")
+
+Step 3 — Semantic clustering
+- Primary key: the normalized message template.
+- Secondary: cosine/semantic similarity between templates to merge near-duplicates.
+  (If two templates differ only by minor tokens and clearly describe the same failure, merge them.)
+- Keep clusters tight; avoid over-merging dissimilar failures.
+- Maintain original log message order within each resulting cluster.
+
+Step 4 — Choose a representative ID per cluster - MANDATORY ID SELECTION
+- For the chosen ID pattern from Step 1, collect IDs appearing in the cluster's log messages.
+- Pick ONE representative ID per cluster using:
+  1) PRIORITY: IDs from log messages with "trace_context_found": true (highest preference)
+  2) Most frequent ID within the cluster.
+  3) Tie-breaker: the ID whose log messages span the richest cross-service coverage (more distinct services/sources).
+  4) Final tie-breaker: prefer IDs from more recent timestamps if available.
+- CRITICAL: Every cluster MUST have a chosen_id. If the primary pattern is missing:
+  - Try secondary patterns (e.g., if trace_id missing, use span_id or parent_span_id)
+  - Use IDs extracted from regex search patterns
+  - Use ANY available ID pattern from the log messages, even if imperfect
+  - Extract using all available regex patterns
+  - As absolute last resort, generate a synthetic ID from log content hash
+  - NEVER set chosen_id to null - the workflow must continue to splunk_trace_search_by_ids
+- VALIDATION: Before finalizing chosen_id, verify it's not null, empty, or just whitespace
+
+Step 5 — Output - MANDATORY JSON WITH TRACE IDs
+Output ONLY valid JSON. The JSON must be an array of groups:
+[
+  {
+    "pattern": "<human-readable short label for the error pattern>",
+    "template": "<normalized message template>",
+    "count": <number_of_log_messages_in_group>,
+    "chosen_id": "<the selected trace/correlation ID - NEVER null>",
+    "all_ids": ["<id1>", "<id2>", ...],           // unique IDs in this group (omit if none)
+    "sample_logs": [ "log message 1", "log message 2", ... ]  // up to 5 representative raw log messages
+  },
+  ...
+]
+
+WORKFLOW CONTINUATION RULES - CRITICAL FOR SUCCESS:
+- Every group MUST have a non-null chosen_id to proceed to the next step (ID extraction)
+- If some log messages lack the chosen ID pattern, EXCLUDE them from "all_ids" consideration but they may still be part of the group's messages
+- If ANY log messages were excluded from grouping because they lacked usable content to normalize, prepend this single plain-text line BEFORE the JSON:
+  "⚠️ Some log messages were skipped due to missing content."
+- Keep JSON strictly valid; do not include commentary after the JSON
+- Aim for at most 8–12 groups by merging near-duplicates; prefer fewer, clearer groups over many tiny ones
+- REMEMBER: The chosen_id values will be extracted and used for trace fetching - ensure they are valid trace/correlation IDs
+
+FINAL VALIDATION: Before outputting, verify that EVERY group has a chosen_id value. If any group lacks one, use fallback strategies from Step 4.

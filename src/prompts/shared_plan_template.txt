@@ -1,0 +1,14 @@
+{
+  "kind": "plan",
+  "prompt": "{{promptInstructions}}",
+  "inputData": {{inputDataJson}},
+  "next": [
+    {
+      "type": "tool",
+      "toolName": "{{nextTool}}",
+      "args": {{argsJson}},
+      "reason": "{{reason}}"
+    }
+  ],
+  "autoExecuteHint": true
+}
