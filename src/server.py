@@ -39,13 +39,6 @@ from src.tools.analyze_traces_narrative import get_analyze_traces_narrative_tool
 from src.tools.group_error_logs_prompt import get_tool_definition as get_group_error_logs_tool, execute as execute_group_error_logs
 from src.tools.extract_trace_ids_for_search import get_tool_definition as get_extract_trace_ids_tool, execute as execute_extract_trace_ids
 from src.tools.ticket_split_prepare import get_tool_definition as get_ticket_split_prepare_tool
-from src.tools.jira import (
-    execute_jira_search, execute_jira_projects, execute_jira_issue
-)
-from src.tools.github import (
-    execute_github_repositories, execute_github_repository,
-    execute_github_issues, execute_github_pull_requests
-)
 from src.config import get_config
 
 # Get configuration to determine server name
