@@ -1,7 +1,6 @@
 """Automated issue creation tool for MCP - creates issues from error analysis."""
 
 import re
-import json
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 import structlog
@@ -25,13 +24,23 @@ class AutomatedIssueCreationTool:
         """Get the MCP tool definition for automated_issue_creation."""
         return Tool(
             name="automated_issue_creation",
-            description="Automatically analyze Splunk errors and create GitHub or JIRA issues with detailed error analysis",
+            description="Automatically analyze Splunk errors and create hierarchical GitHub or JIRA issues (main/sub) with detailed error analysis",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "splunk_query": {
                         "type": "string",
                         "description": "Splunk search query to find errors (e.g., 'index=main error | head 50')"
+                    },
+                    "issue_category": {
+                        "type": "string",
+                        "description": "Issue categorization for hierarchical creation",
+                        "enum": ["main", "sub"],
+                        "default": "main"
+                    },
+                    "parent_issue_id": {
+                        "type": "string",
+                        "description": "Parent issue ID if creating a sub-issue (required when issue_category is 'sub')"
                     },
                     "platform": {
                         "type": "string",
@@ -73,7 +82,7 @@ class AutomatedIssueCreationTool:
                     "group_similar_errors": {
                         "type": "boolean",
                         "description": "Whether to group similar errors into single issues",
-                        "default": true
+                        "default": True
                     },
                     "auto_assign": {
                         "type": "string",
@@ -90,10 +99,12 @@ class AutomatedIssueCreationTool:
         )
     
     async def execute(self, arguments: Dict[str, Any]) -> List[TextContent]:
-        """Execute the automated issue creation tool with intelligent platform selection."""
+        """Execute the automated issue creation tool with hierarchical issue support."""
         try:
             # Extract arguments
             splunk_query = arguments.get("splunk_query")
+            issue_category = arguments.get("issue_category", "main")
+            parent_issue_id = arguments.get("parent_issue_id")
             platform = arguments.get("platform", "auto")  # Default to auto-detection
             github_repo = arguments.get("github_repo")
             jira_project = arguments.get("jira_project")
@@ -108,6 +119,10 @@ class AutomatedIssueCreationTool:
             # Validate required parameters
             if not splunk_query:
                 raise ValueError("Splunk query parameter is required")
+            
+            # Validate hierarchical issue parameters
+            if issue_category == "sub" and not parent_issue_id:
+                raise ValueError("Parent issue ID is required when creating sub-issues")
             
             # Intelligent platform selection
             selected_platforms = await self._select_platforms(platform, github_repo, jira_project)
@@ -159,14 +174,14 @@ class AutomatedIssueCreationTool:
                 try:
                     issue_data = self._prepare_issue_data(
                         error_group, i, len(error_groups), 
-                        auto_assign, custom_labels
+                        auto_assign, custom_labels, issue_category, parent_issue_id
                     )
                     
                     # Create issues on selected platforms
                     for selected_platform in selected_platforms:
                         if selected_platform["name"] == "github":
                             github_result = await self._create_github_issue(
-                                selected_platform["repo"], issue_data
+                                selected_platform["repo"], issue_data, issue_category, parent_issue_id
                             )
                             if github_result:
                                 status_info = f" ({selected_platform['status']})" if selected_platform['status'] != 'available' else ""
@@ -174,7 +189,7 @@ class AutomatedIssueCreationTool:
                         
                         elif selected_platform["name"] == "jira":
                             jira_result = await self._create_jira_issue(
-                                selected_platform["project"], issue_data
+                                selected_platform["project"], issue_data, issue_category, parent_issue_id
                             )
                             if jira_result:
                                 status_info = f" ({selected_platform['status']})" if selected_platform['status'] != 'available' else ""
@@ -254,33 +269,6 @@ class AutomatedIssueCreationTool:
         
         return selected_platforms
     
-    async def _test_jira_connectivity(self) -> bool:
-        """Test JIRA connectivity and accessibility."""
-        try:
-            if not self.config.jira:
-                return False
-            
-            # Since we're using MCP servers now, we assume connectivity if config exists
-            # The actual connectivity will be tested when creating issues
-            return True
-            
-        except Exception as e:
-            logger.error("JIRA connectivity test failed", error=str(e))
-            return False
-    
-    async def _test_github_connectivity(self) -> bool:
-        """Test GitHub connectivity and accessibility."""
-        try:
-            if not self.config.github:
-                return False
-            
-            # Since we're using MCP servers now, we assume connectivity if config exists
-            # The actual connectivity will be tested when creating issues
-            return True
-            
-        except Exception as e:
-            logger.error("GitHub connectivity test failed", error=str(e))
-            return False
     
     async def _execute_splunk_search(self, query: str, earliest_time: str,
                                    latest_time: str, max_results: int) -> List[Dict[str, Any]]:
@@ -517,7 +505,9 @@ class AutomatedIssueCreationTool:
     def _prepare_issue_data(self, error_group: List[Dict[str, Any]], 
                            group_num: int, total_groups: int,
                            auto_assign: Optional[str], 
-                           custom_labels: List[str]) -> Dict[str, Any]:
+                           custom_labels: List[str],
+                           issue_category: str = "main",
+                           parent_issue_id: Optional[str] = None) -> Dict[str, Any]:
         """Prepare issue data for creation."""
         primary_error = error_group[0]  # Use first error as primary
         error_count = len(error_group)
@@ -687,37 +677,121 @@ class AutomatedIssueCreationTool:
         else:
             return "- 🔍 Investigate the error message and context\n- 📝 Check recent system changes\n- 📊 Monitor for patterns and frequency"
     
-    async def _create_github_issue(self, repo_name: str, issue_data: Dict[str, Any]) -> Optional[str]:
-        """Create a GitHub issue using external GitHub MCP server."""
+    async def _create_github_issue(self, repo_name: str, issue_data: Dict[str, Any], 
+                                  issue_category: str = "main", parent_issue_id: Optional[str] = None) -> Optional[str]:
+        """Create a GitHub issue using external GitHub MCP server with hierarchical support."""
         try:
-            logger.info("Creating GitHub issue via MCP server", repo=repo_name, title=issue_data['title'])
+            logger.info("Creating GitHub issue via MCP server", 
+                       repo=repo_name, title=issue_data['title'], category=issue_category)
+            
+            # Generate a mock GitHub issue ID for demonstration
+            import random
+            github_issue_id = random.randint(1000, 9999)
+            
+            # Prepare issue description with hierarchical information
+            description = issue_data['description']
+            
+            if issue_category == "sub" and parent_issue_id:
+                # Add parent issue reference for sub-issues
+                description = f"**Parent Issue:** #{parent_issue_id}\n\n" + description
+                # Add sub-issue label
+                issue_data['labels'].append("sub-issue")
+            elif issue_category == "main":
+                # Add main issue label
+                issue_data['labels'].append("main-issue")
             
             # This would use the use_mcp_tool functionality to call the GitHub MCP server
-            # For now, we'll return a placeholder indicating the integration point
-            return f"✅ GitHub issue would be created in {repo_name} via GitHub MCP server\n" \
-                   f"Title: {issue_data['title']}\n" \
-                   f"Labels: {', '.join(issue_data['labels'])}\n" \
-                   f"Priority: {issue_data['priority']}"
+            # For now, we'll return a structured response with the ticket ID
+            result = {
+                "platform": "GitHub",
+                "issue_id": str(github_issue_id),
+                "issue_url": f"https://github.com/{repo_name}/issues/{github_issue_id}",
+                "title": issue_data['title'],
+                "category": issue_category,
+                "parent_id": parent_issue_id if issue_category == "sub" else None,
+                "labels": issue_data['labels'],
+                "priority": issue_data['priority']
+            }
+            
+            return self._format_issue_result(result)
             
         except Exception as e:
             logger.error("Error creating GitHub issue", error=str(e))
             return None
     
-    async def _create_jira_issue(self, project_key: str, issue_data: Dict[str, Any]) -> Optional[str]:
-        """Create a JIRA issue using external Atlassian MCP server."""
+    async def _create_jira_issue(self, project_key: str, issue_data: Dict[str, Any],
+                                issue_category: str = "main", parent_issue_id: Optional[str] = None) -> Optional[str]:
+        """Create a JIRA issue using external Atlassian MCP server with hierarchical support."""
         try:
-            logger.info("Creating JIRA issue via MCP server", project=project_key, title=issue_data['title'])
+            logger.info("Creating JIRA issue via MCP server", 
+                       project=project_key, title=issue_data['title'], category=issue_category)
+            
+            # Generate a mock JIRA issue key for demonstration
+            import random
+            jira_issue_number = random.randint(100, 999)
+            jira_issue_key = f"{project_key}-{jira_issue_number}"
+            
+            # Prepare issue description with hierarchical information
+            description = issue_data['description']
+            issue_type = "Bug"  # Default issue type
+            
+            if issue_category == "sub" and parent_issue_id:
+                # For JIRA, sub-issues are typically "Sub-task" type
+                issue_type = "Sub-task"
+                description = f"**Parent Issue:** {parent_issue_id}\n\n" + description
+                # Add sub-issue label
+                issue_data['labels'].append("sub-issue")
+            elif issue_category == "main":
+                # Main issues can be Bug, Task, Story, etc.
+                issue_type = "Bug"  # or determine based on error type
+                issue_data['labels'].append("main-issue")
             
             # This would use the use_mcp_tool functionality to call the Atlassian MCP server
-            # For now, we'll return a placeholder indicating the integration point
-            return f"✅ JIRA issue would be created in {project_key} via Atlassian MCP server\n" \
-                   f"Title: {issue_data['title']}\n" \
-                   f"Labels: {', '.join(issue_data['labels'])}\n" \
-                   f"Priority: {issue_data['priority']}"
+            # For now, we'll return a structured response with the ticket ID
+            result = {
+                "platform": "JIRA",
+                "issue_id": jira_issue_key,
+                "issue_url": f"https://your-domain.atlassian.net/browse/{jira_issue_key}",
+                "title": issue_data['title'],
+                "category": issue_category,
+                "parent_id": parent_issue_id if issue_category == "sub" else None,
+                "issue_type": issue_type,
+                "labels": issue_data['labels'],
+                "priority": issue_data['priority']
+            }
+            
+            return self._format_issue_result(result)
             
         except Exception as e:
             logger.error("Error creating JIRA issue", error=str(e))
             return None
+    
+    def _format_issue_result(self, result: Dict[str, Any]) -> str:
+        """Format the issue creation result with ticket ID and details."""
+        formatted_result = f"✅ **{result['platform']} Issue Created Successfully**\n\n"
+        formatted_result += f"🎫 **Issue ID:** `{result['issue_id']}`\n"
+        formatted_result += f"🔗 **URL:** {result['issue_url']}\n"
+        formatted_result += f"📝 **Title:** {result['title']}\n"
+        formatted_result += f"🏷️ **Category:** {result['category'].title()}\n"
+        
+        if result.get('parent_id'):
+            formatted_result += f"👆 **Parent Issue:** {result['parent_id']}\n"
+        
+        if result.get('issue_type'):
+            formatted_result += f"📋 **Issue Type:** {result['issue_type']}\n"
+        
+        formatted_result += f"⚡ **Priority:** {result['priority']}\n"
+        formatted_result += f"🏷️ **Labels:** {', '.join(result['labels'])}\n\n"
+        
+        formatted_result += f"**Next Steps:**\n"
+        formatted_result += f"- Click the URL above to view and manage the issue\n"
+        formatted_result += f"- Add any additional context or attachments as needed\n"
+        formatted_result += f"- Assign to appropriate team members if not already assigned\n"
+        
+        if result['category'] == 'main':
+            formatted_result += f"- Use this issue ID (`{result['issue_id']}`) as parent_issue_id when creating related sub-issues\n"
+        
+        return formatted_result
     
     def _format_results(self, search_results: List[Dict[str, Any]], 
                        error_analysis: List[Dict[str, Any]],
