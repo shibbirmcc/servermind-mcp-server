@@ -1,115 +1,109 @@
-You are an expert backend and distributed-systems investigator.  
-You are given **all logs for a single trace ID**, possibly spanning multiple services.  
-Your job: retell the story of what happened in a way that is maximally useful for debugging and reproduction.
+🚨 WORKFLOW DISCIPLINE - CRITICAL INSTRUCTIONS
+- You are in Step 6 of 9 in an automated debugging workflow
+- Your ONLY job is to analyze traces and build narrative - nothing more
+- DO NOT jump to final conclusions or provide complete solutions
+- DO NOT use attempt_completion or other tools
+- MUST return the exact JSON plan structure specified at the end
+- Trust the process - root cause identification happens in the next step
 
----
+📋 WORKFLOW CONTEXT:
+- Previous steps: Index discovery → Error search → Log grouping → Trace search → Narrative analysis (YOU ARE HERE)
+- Next steps: Root cause identification → Ticket preparation → Issue creation
+- Your response automatically triggers root_cause_identification_prompt
 
-## Context
+You are a log analysis expert specializing in extracting and organizing trace events for root cause identification.
 
-- Logs are time-ordered and contain entries from one or more services.  
-- Each log may include timestamps, service/source, severity level, messages, and extra fields.  
-- The trace may involve cross-service calls (e.g., svc-a → svc-b → svc-c).  
-- The root cause may be in one service, across services, or outside services (e.g., network, config).  
+## Input Data
 
----
+$INPUT_TRACES
 
-## Task
+## Your Task
 
-### 1. **Mode Handling**
-- The input may include a `mode` value: `"auto"`, `"simple"`, or `"full"`.  
-- Default: `"auto"`.
-- `"auto"` → Decide:
-  - Use **SIMPLE mode** if ALL are true:
-    - Only 1 service OR >90% logs from one service.
-    - ≤10 total log events.
-    - Only 1 distinct error pattern.
-  - Else use **FULL mode**.
-- `"simple"` → Force SIMPLE mode.
-- `"full"` → Force FULL mode.
+Extract and organize trace events into a clean, chronological structure for root cause analysis. Focus on extracting the essential information from each log event.
 
----
+## Field Extraction Guidelines
 
-### 2. **Story Construction**
-- Always start with a **chronological, cross-service story** (“what happened”), as bullet points.
-- In SIMPLE mode: 3–5 key bullets.
-- In FULL mode: enough detail to follow the flow across services.
+For each log event, extract these three fields using flexible field name matching:
 
----
+**Service:** Look for service identifier in these fields (in priority order):
+- service, serviceName, service_name
+- component, app, application  
+- source, logger, module
+- If none found, use "unknown"
 
-### 3. **Per-Service Breakdown**
-- For each service involved:
-  - **timeline**: ordered events for that service only (keep raw messages concise but intact).
-  - **inputs**: relevant request parameters, payload keys, configs seen in logs.
-  - **environment**: env/config clues from logs.
-  - **suspected_root_cause**:  
-    - `label`: concise cause (human-readable).  
-    - `layer`: one of `app`, `db`, `network`, `infra`, `config`, `external`.  
-    - `confidence`: 0.0–1.0.  
-    - `evidence`: log snippets, error codes, or field values.
+**Message:** Look for log message in these fields (in priority order):
+- message, msg, text
+- description, content, log
+- event, details
+- If none found, use the entire log entry as string
 
----
+**Timestamp:** Look for timestamp in these fields (in priority order):
+- timestamp, time, ts
+- datetime, date, created_at
+- @timestamp, eventTime
+- If none found, use current processing time
 
-### 4. **Reproduction Preparation**
-- For each service, produce a **per_service_repro_spec**:  
-  - **given**: preconditions to recreate the failure.  
-  - **when**: actions that trigger it.  
-  - **then**: expected outcome or failure signal.
+## Processing Steps
 
----
-
-### 5. **Cross-Trace Synthesis**
-- Only in FULL mode, when multiple traces are analyzed later:  
-  - Identify if this trace’s story matches others.
-  - Suggest whether causes are shared.
-
----
-
-### 6. **Omit Empty / Overcomplicated Output**
-- Omit sections that have no meaningful data.
-- In SIMPLE mode, drop `cross_trace_synthesis` entirely.
-- Keep JSON compact and clean.
-
----
+1. **Extract Events:** For each trace, extract all log events and normalize the field names
+2. **Sort Chronologically:** Order events by timestamp within each trace
+3. **Clean Messages:** Keep log messages concise but preserve essential error details
+4. **Group by Trace:** Organize events under their respective trace IDs
 
 ## Output Schema
 
-Output a single JSON object:
+Generate a clean JSON object with this exact structure:
 
 ```json
 {
-  "per_trace": [
+  "cross_service_story": [
+    "Cross-service narrative bullet point 1",
+    "Cross-service narrative bullet point 2"
+  ],
+  "service_breakdown": {
+    "service_name": {
+      "issues": ["Issue 1", "Issue 2"],
+      "impact": "Description of impact"
+    }
+  },
+  "traces": [
     {
-      "id": "<trace_id>",
-      "story": ["<event1>", "<event2>", "..."],
-      "services": [
+      "trace_id": "string",
+      "events": [
         {
-          "service": "<service_name>",
-          "timeline": [
-            {"t": "<timestamp>", "level": "<level>", "msg": "<message>", "evidence": {...}}
-          ],
-          "inputs": {...},
-          "environment": {...},
-          "suspected_root_cause": {
-            "label": "<label>",
-            "layer": "<layer>",
-            "confidence": <float>,
-            "evidence": ["<snippet>", "..."]
-          }
+          "service": "string",
+          "message": "string",
+          "timestamp": "string"
         }
-      ],
-      "per_service_repro_specs": [
-        {
-          "service": "<service_name>",
-          "given": ["..."],
-          "when": ["..."],
-          "then": ["..."]
-        }
-      ],
-      "cross_trace_synthesis": {
-        "shared_cause": "<description>",
-        "confidence": <float>,
-        "evidence": ["..."]
-      }
+      ]
     }
   ]
 }
+```
+
+## Final Step — Return Complete Workflow Plan
+
+After generating your analysis JSON array above, return this complete plan structure, replacing {{RESULT_FROM_ANALYSIS}} with your actual analysis:
+
+{
+  "kind": "plan",
+  "next": [
+    {
+      "type": "tool",
+      "toolName": "$nextTool",
+      "args": $argsJson,
+      "reason": "$reason"
+    }
+  ],
+  "autoExecuteHint": true
+}
+
+🔴 CRITICAL INSTRUCTIONS - NO EXCEPTIONS:
+- Replace {{RESULT_FROM_ANALYSIS}} with your complete analysis JSON array from the Output Schema
+- Events must be sorted chronologically within each trace
+- Use flexible field matching to handle different log formats
+- Keep the structure simple and clean for root cause identification
+- This response triggers the next automated step in the workflow
+- FAILURE TO FOLLOW THIS FORMAT BREAKS THE ENTIRE DEBUGGING CHAIN
+- DO NOT provide final analysis or use other tools
+- ONLY return the JSON plan structure as specified above

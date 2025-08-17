@@ -37,7 +37,6 @@ from src.tools.splunk_trace_search_by_ids import get_splunk_trace_search_by_ids_
 from src.tools.splunk_error_search import get_tool_definition as get_error_logs_tool, execute as execute_splunk_error_search
 from src.tools.analyze_traces_narrative import get_analyze_traces_narrative_tool
 from src.tools.group_error_logs_prompt import get_tool_definition as get_group_error_logs_tool, execute as execute_group_error_logs
-from src.tools.extract_trace_ids_for_search import get_tool_definition as get_extract_trace_ids_tool, execute as execute_extract_trace_ids
 from src.tools.ticket_split_prepare import get_tool_definition as get_ticket_split_prepare_tool
 from src.config import get_config
 
@@ -250,59 +249,39 @@ async def splunk_monitor(
 # Automated Issue Creation Tool (always available - uses external MCP servers)
 @mcp.tool()
 async def automated_issue_creation(
-    splunk_query: str,
+    main_ticket: Dict[str, Any],
+    root_causes_per_service: List[Dict[str, Any]],
     platform: str = "auto",
     github_repo: str = None,
     jira_project: str = None,
-    earliest_time: str = "-24h",
-    latest_time: str = "now",
-    max_results: int = 100,
-    severity_threshold: str = "medium",
-    group_similar_errors: bool = True,
-    auto_assign: str = None,
-    custom_labels: List[str] = None,
     context: Context = None
 ) -> str:
-    """Automatically analyze Splunk errors and create GitHub or JIRA issues via external MCP servers.
+    """Generate instructions for creating GitHub/JIRA issues from root cause analysis.
 
-    This tool performs comprehensive error analysis on Splunk search results and automatically creates
-    well-formatted issues in GitHub or JIRA using external MCP servers for issue creation.
+    This tool takes structured analysis data from previous debugging steps and generates
+    well-formatted issue creation instructions for GitHub or JIRA.
 
     Args:
-        splunk_query: Splunk search query to find errors (e.g., 'index=main error | head 50')
+        main_ticket: Main ticket from root cause identification with trace_id, title, description, etc.
+        root_causes_per_service: Root causes per service from root cause identification
         platform: Platform to create issues on ('github', 'jira', 'both', or 'auto' for intelligent selection)
         github_repo: GitHub repository name in format 'owner/repo' (required if platform is 'github' or 'both')
         jira_project: JIRA project key (required if platform is 'jira' or 'both')
-        earliest_time: Start time for Splunk search (default: '-24h')
-        latest_time: End time for Splunk search (default: 'now')
-        max_results: Maximum number of Splunk results to analyze (1-1000, default: 100)
-        severity_threshold: Minimum severity level to create issues for ('low', 'medium', 'high', 'critical')
-        group_similar_errors: Whether to group similar errors into single issues (default: True)
-        auto_assign: Username to automatically assign created issues to (optional)
-        custom_labels: Additional custom labels to add to created issues (optional)
 
     Returns:
-        Comprehensive analysis report with created issue details and error analysis
+        Detailed issue creation instructions with formatted titles, descriptions, and metadata
     """
     try:
         arguments = {
-            "splunk_query": splunk_query,
-            "platform": platform,
-            "earliest_time": earliest_time,
-            "latest_time": latest_time,
-            "max_results": max_results,
-            "severity_threshold": severity_threshold,
-            "group_similar_errors": group_similar_errors
+            "main_ticket": main_ticket,
+            "root_causes_per_service": root_causes_per_service,
+            "platform": platform
         }
 
         if github_repo is not None:
             arguments["github_repo"] = github_repo
         if jira_project is not None:
             arguments["jira_project"] = jira_project
-        if auto_assign is not None:
-            arguments["auto_assign"] = auto_assign
-        if custom_labels is not None:
-            arguments["custom_labels"] = custom_labels
 
         results = await execute_automated_issue_creation(arguments)
 
@@ -531,46 +510,6 @@ async def group_error_logs(
     except Exception as e:
         return f"Error grouping error logs: {str(e)}"
 
-@mcp.tool()
-async def extract_trace_ids_for_search(
-    grouped_logs: str,
-    deduplicate: bool = True,
-    earliest_time: str = "-24h",
-    latest_time: str = "now",
-    max_results: int = 4000,
-    context: Context = None
-) -> str:
-    """Extract trace/correlation IDs from grouped error logs output and prepare
-    the next step to fetch full traces via splunk_trace_search_by_ids.
-
-    Args:
-        grouped_logs: JSON string output from group_error_logs containing grouped error patterns with chosen_id values
-        deduplicate: Whether to remove duplicate trace IDs (default: true)
-        earliest_time: Start time for trace search (default: -24h)
-        latest_time: End time for trace search (default: now)
-        max_results: Maximum results per trace search (default: 4000)
-
-    Returns:
-        Plan to call splunk_trace_search_by_ids with extracted trace IDs
-    """
-    try:
-        arguments = {
-            "grouped_logs": grouped_logs,
-            "deduplicate": deduplicate,
-            "earliest_time": earliest_time,
-            "latest_time": latest_time,
-            "max_results": max_results
-        }
-
-        results = await execute_extract_trace_ids(arguments)
-
-        if results and len(results) > 0:
-            return results[0].text
-        else:
-            return "No results returned from trace ID extraction"
-
-    except Exception as e:
-        return f"Error extracting trace IDs: {str(e)}"
 
 @mcp.tool()
 async def root_cause_identification_prompt(
@@ -873,8 +812,7 @@ def main():
 
     print("  Analysis & Workflow Tools:")
     print(f"    - logs_debug_entry: 🚀 START HERE for general debugging (e.g., 'something is wrong in staging')")
-    print(f"    - group_error_logs: Group ERROR logs into semantic clusters")
-    print(f"    - extract_trace_ids_for_search: Extract trace IDs from grouped logs and prepare for trace search")
+    print(f"    - group_error_logs: Group ERROR logs into semantic clusters and extract trace IDs")
     print(f"    - analyze_traces_narrative: Generate narrative analysis with cross-service story")
     print(f"    - root_cause_identification_prompt: Confirm service-level root causes")
     print(f"    - ticket_split_prepare: Create ticket-ready items from analysis")

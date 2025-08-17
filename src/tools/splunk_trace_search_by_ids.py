@@ -11,7 +11,7 @@ import structlog
 from mcp.types import Tool, TextContent
 
 # Reuse the generic search tool
-from .search import execute_splunk_query
+from .search import execute_splunk_query_raw_only
 
 logger = structlog.get_logger(__name__)
 
@@ -30,10 +30,11 @@ ID_CHUNK_SIZE = 25
 class SplunkTraceSearchByIdsTool:
     """
     Step 6 in the chain.
-    Inputs: `ids` (list of trace/correlation IDs), optional `indices`, `earliest_time`, `latest_time`, `max_results`.
+    Inputs: `field_name` (type of ID field) and `ids` (list of trace/correlation IDs).
     Behavior:
       - Build SPL that fetches ALL logs for the given IDs across candidate ID fields (equality) with a fallback to _raw.
-      - Execute via splunk_search (raw_return=True).
+      - Execute via splunk_search (raw_return=True) with auto-broadening time ranges (24h → 48h → 72h until results found).
+      - Uses default settings: all indices, 4000 max results per chunk.
       - Bucket events by the ID value (best-effort field detection; fallback to _raw contains).
       - Emit machine-readable `{"traces":[{"id":..., "events":[...]}, ...]}` and a plan to the analysis step.
     """
@@ -52,35 +53,17 @@ class SplunkTraceSearchByIdsTool:
             inputSchema={
                 "type": "object",
                 "properties": {
+                    "field_name": {
+                        "type": "string",
+                        "description": "The type of ID field found (e.g., 'trace_id', 'correlation_id', 'request_id')."
+                    },
                     "ids": {
                         "type": "array",
                         "items": {"type": "string"},
                         "description": "Trace/correlation IDs to fetch."
-                    },
-                    "indices": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Optional Splunk indices to restrict search (defaults to all)."
-                    },
-                    "earliest_time": {
-                        "type": "string",
-                        "description": "Start time (e.g., '-24h', '-2d', ISO).",
-                        "default": "-24h"
-                    },
-                    "latest_time": {
-                        "type": "string",
-                        "description": "End time (e.g., 'now').",
-                        "default": "now"
-                    },
-                    "max_results": {
-                        "type": "integer",
-                        "description": "Max total events to return (per chunk).",
-                        "default": 4000,
-                        "minimum": 100,
-                        "maximum": 20000
                     }
                 },
-                "required": ["ids"]
+                "required": ["field_name", "ids"]
             }
         )
 
@@ -90,55 +73,71 @@ class SplunkTraceSearchByIdsTool:
             if not ids or not all(isinstance(i, str) and i.strip() for i in ids):
                 return [TextContent(type="text", text="❌ 'ids' must be a non-empty list of strings.")]
 
-            indices: Optional[List[str]] = arguments.get("indices")
-            earliest = arguments.get("earliest_time", "-24h")
-            latest = arguments.get("latest_time", "now")
-            max_results = int(arguments.get("max_results", 4000))
+            field_name = arguments.get("field_name", "unknown")
+            # Use default values for simplified interface
+            indices: Optional[List[str]] = None  # Search all indices
+            latest = "now"     # Search up to now
+            max_results = 4000 # Default result limit
 
-            # Build and run in chunks to avoid overly long SPL queries
-            all_events: List[Dict[str, Any]] = []
-            id_chunks = [ids[i:i + ID_CHUNK_SIZE] for i in range(0, len(ids), ID_CHUNK_SIZE)]
+            logger.info("Starting trace search with auto-broadening", 
+                       field_name=field_name, 
+                       id_count=len(ids))
 
-            for chunk in id_chunks:
-                spl = self._build_trace_spl(chunk, indices)
-                logger.info("Trace search chunk", ids=len(chunk), earliest=earliest, latest=latest)
-                payload = await execute_splunk_query(
-                    query=spl,
-                    earliest_time=earliest,
-                    latest_time=latest,
-                    max_results=max_results
-                )
-                events = payload.get("results", []) or []
-                all_events.extend(events)
+            # Auto-broaden search time range: 24h → 48h → 72h
+            time_ranges = ["-24h", "-48h", "-72h"]
+            all_raw_logs: List[str] = []
+            used_range = None
 
-            # Group events by ID (using candidate fields; fallback to _raw contains)
-            traces = self._group_events_by_ids(all_events, ids)
+            for time_range in time_ranges:
+                logger.info("Trying time range", time_range=time_range)
+                
+                # Build and run in chunks to avoid overly long SPL queries
+                range_raw_logs: List[str] = []
+                id_chunks = [ids[i:i + ID_CHUNK_SIZE] for i in range(0, len(ids), ID_CHUNK_SIZE)]
 
-            # Machine-readable block
-            data = {"kind": "data", "earliest_time": earliest, "latest_time": latest, "traces": traces}
-            json_output = json.dumps(data, ensure_ascii=False)
-            outputs: List[TextContent] = [TextContent(type="text", text=f"JSON_OUTPUT:\n{json_output}")]
+                for chunk in id_chunks:
+                    spl = self._build_trace_spl(chunk, indices)
+                    logger.info("Trace search chunk", ids=len(chunk), time_range=time_range)
+                    raw_logs = await execute_splunk_query_raw_only(
+                        query=spl,
+                        earliest_time=time_range,
+                        latest_time=latest,
+                        max_results=max_results
+                    )
+                    range_raw_logs.extend(raw_logs)
 
+                # Check if we found any logs in this time range
+                if range_raw_logs:
+                    all_raw_logs = range_raw_logs
+                    used_range = time_range
+                    logger.info("Found traces in time range", time_range=time_range, log_count=len(all_raw_logs))
+                    break
+                else:
+                    logger.info("No traces found in time range", time_range=time_range)
+
+            # Group raw logs by ID (using _raw contains matching)
+            traces = self._group_raw_logs_by_ids(all_raw_logs, ids)
+            earliest = used_range or "-72h"  # Use the successful range or max range for reporting
+
+            # Always proceed to analysis step, even with empty traces
             if not traces or all(len(t.get("events", [])) == 0 for t in traces):
-                # Nothing to analyze; inform upstream clearly.
-                msg = (
-                    "ℹ️ No matching logs were found for the provided IDs in the selected time range.\n"
-                    f"- IDs: {', '.join(ids)}\n"
-                    f"- Time range: {earliest} → {latest}\n"
-                    f"- Indices: {', '.join(indices) if indices else '(all)'}\n"
-                    "You can widen the time window or verify the IDs and indices."
+                logger.info("No detailed trace data found, proceeding with empty traces to analysis")
+                # Create empty traces structure for the requested IDs
+                traces = [{"id": trace_id, "events": []} for trace_id in ids]
+                reason = (
+                    f"ℹ️ No detailed trace logs found for IDs: {', '.join(ids)} in time range {earliest} → {latest}. "
+                    "Proceeding with analysis using original error logs from previous steps."
                 )
-                outputs.append(TextContent(type="text", text=msg))
-                return outputs
+            else:
+                reason = "Full logs collected per ID — proceed to cross-service narrative and root-cause analysis."
 
             # Plan to analysis step (Step 8) — adjust nextTool name if different
             plan_json = self._plan_tpl.substitute(
                 nextTool="analyze_traces_narrative",
                 argsJson=json.dumps({"traces": traces}, ensure_ascii=False),
-                reason="Full logs collected per ID — proceed to cross-service narrative and root-cause analysis."
+                reason=reason
             )
-            outputs.append(TextContent(type="text", text=plan_json))
-            return outputs
+            return [TextContent(type="text", text=plan_json)]
 
         except Exception as e:
             logger.error("splunk_trace_search_by_ids failed", error=str(e))
@@ -169,48 +168,54 @@ class SplunkTraceSearchByIdsTool:
         # final SPL; no head here — rely on max_results in API
         return f"search {index_clause} {predicate} | sort _time"
 
-    def _group_events_by_ids(self, events: List[Dict[str, Any]], ids: List[str]) -> List[Dict[str, Any]]:
+    def _group_raw_logs_by_ids(self, raw_logs: List[str], ids: List[str]) -> List[Dict[str, Any]]:
         """
-        Group fetched events into traces per requested ID.
-        - Prefer exact matches on candidate fields.
-        - Fallback: assign by _raw contains when unique and unambiguous.
-        - Keep event order by _time if present (otherwise as-is).
+        Group raw log strings into traces per requested ID and parse JSON events.
+        Uses _raw contains matching since we only have the raw log strings.
         """
-        # map id -> events
+        # map id -> parsed events
         buckets: Dict[str, List[Dict[str, Any]]] = {i: [] for i in ids}
 
-        # Fast path: exact field match to requested IDs
-        for ev in events:
-            assigned = False
-            for f in CANDIDATE_ID_FIELDS:
-                val = ev.get(f)
-                if isinstance(val, str) and val in buckets:
-                    buckets[val].append(ev)
-                    assigned = True
-                    break
-
-            if assigned:
+        # Match raw logs to IDs by string contains
+        for raw_log in raw_logs:
+            if not raw_log:
                 continue
-
-            # Fallback: _raw contains match (only if exactly one id matches to avoid ambiguity)
-            raw = str(ev.get("_raw", ""))[:20000]
-            matches = [i for i in ids if i and i in raw]
+                
+            # Find which IDs are mentioned in this log (only assign if exactly one match to avoid ambiguity)
+            matches = [i for i in ids if i and i in raw_log]
             if len(matches) == 1:
-                buckets[matches[0]].append(ev)
+                # Parse JSON if possible, otherwise create a structured event
+                parsed_event = self._parse_log_event(raw_log)
+                buckets[matches[0]].append(parsed_event)
 
-        # Sort each bucket by _time if present
-        def _time_key(e: Dict[str, Any]):
-            t = e.get("_time")
-            # Splunk often returns epoch or string; leave as-is for ordering robustness
-            return str(t) if t is not None else ""
-
+        # Convert to expected format with parsed events
         traces: List[Dict[str, Any]] = []
         for i in ids:
-            evs = buckets.get(i, [])
-            evs_sorted = sorted(evs, key=_time_key)
-            traces.append({"id": i, "events": evs_sorted})
+            events_for_id = buckets.get(i, [])
+            traces.append({"id": i, "events": events_for_id})
 
         return traces
+
+    def _parse_log_event(self, raw_log: str) -> Dict[str, Any]:
+        """
+        Parse a raw log string into a structured event object.
+        Attempts JSON parsing first, falls back to structured plain text parsing.
+        """
+        try:
+            # Try to parse as JSON
+            parsed = json.loads(raw_log)
+            if isinstance(parsed, dict):
+                return parsed
+        except (json.JSONDecodeError, TypeError):
+            pass
+        
+        # Fallback: create structured event from plain text log
+        return {
+            "raw": raw_log,
+            "message": raw_log,
+            "parsed": False,
+            "format": "plain_text"
+        }
 
 
 # Global instance + exports

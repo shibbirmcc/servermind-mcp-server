@@ -1,0 +1,290 @@
+# Automated Issue Creation Instructions - FLEXIBLE INPUT HANDLING
+
+You are tasked with creating GitHub/JIRA issues from root cause analysis data. This tool is designed to handle **multiple input formats** from automated debugging workflows and create a **hierarchical ticket structure** with a main ticket and linked sub-tickets for each service.
+
+## 🔍 Input Format Detection & Smart Extraction
+
+The input data comes from automated debugging workflows and may be in various formats. Your job is to intelligently extract the required information regardless of the input structure.
+
+### Supported Input Formats:
+
+**Format A: Direct Parameters (Ideal)**
+```json
+{
+  "main_ticket": {...},
+  "root_causes_per_service": [...]
+}
+```
+
+**Format B: Nested in 'root_cause' Array (Common from workflow)**
+```json
+{
+  "analysis": {...},
+  "root_cause": [
+    {
+      "main_ticket": {...},
+      "root_causes_per_service": [...]
+    }
+  ]
+}
+```
+
+**Format C: Mixed Analysis Format**
+```json
+{
+  "analysis": {
+    "cross_service_story": [...],
+    "service_breakdown": {...},
+    "traces": [...]
+  },
+  "root_cause": {...}
+}
+```
+
+**Format D: Traces Only (Fallback)**
+```json
+{
+  "traces": [...],
+  "analysis": {...}
+}
+```
+
+## 📋 Data Extraction Process
+
+Follow these steps in order to extract ticket information from the input data:
+
+### Step 1: Try Direct Extraction
+- Look for `main_ticket` and `root_causes_per_service` at the top level
+- If both exist and are properly formatted, use them directly
+- Skip to ticket creation if successful
+
+### Step 2: Try Array Format Extraction  
+- Look for `root_cause` array in the input
+- If it's an array with objects containing `main_ticket`, extract from first element
+- Extract `root_causes_per_service` from the same element
+- Skip to ticket creation if successful
+
+### Step 3: Try Analysis Format Extraction
+- Look for `analysis` object with `traces` or `service_breakdown`
+- Look for `root_cause` object (not array) with structured data
+- Construct main_ticket from analysis summary
+- Extract services from `service_breakdown` or trace events
+- Skip to ticket creation if successful
+
+### Step 4: Fallback Construction
+- If no structured ticket data exists, build from available information
+- Use traces, error logs, or any available service information
+- Create reasonable defaults for missing fields
+- Proceed to ticket creation
+
+## 🛠️ Fallback Construction Rules
+
+When main_ticket or root_causes_per_service are missing, construct them using these rules:
+
+### Main Ticket Construction:
+- **trace_id**: Use first available trace ID or generate "multi-service-incident-{current-timestamp}"
+- **title**: Extract from analysis summary or create "Service Issues Detected - {services}"
+- **description**: Combine cross_service_story or summarize from available error information
+- **services_involved**: Extract unique services from traces, service_breakdown, or error logs
+- **priority**: "high" if errors contain failure keywords (error, failed, timeout, exception), "medium" otherwise
+- **first_seen/last_seen**: Extract from trace events or use current processing time
+
+### Root Causes Construction:
+- Extract services from traces, service_breakdown, or error logs
+- For each service, create root cause from error patterns
+- Use error messages as evidence
+- Generate recommended actions based on error types (config, code, monitoring, investigation)
+- Default confidence to 0.7 for constructed causes
+- Default layer to "app" unless network/db/config patterns detected
+
+## ⚠️ Error Handling & Validation
+
+### Input Validation:
+- If input is completely empty, create a generic "Data Missing - Investigation Required" ticket
+- If input has partial data, extract what's available and note missing information in description
+- Never fail completely - always produce some form of ticket output
+
+### Data Quality Checks:
+- Validate that extracted services are non-empty strings (default to "unknown-service" if empty)
+- Ensure timestamps are in valid format (fallback to current time if invalid)
+- Check that error messages contain meaningful content (minimum 10 characters)
+- Verify priority is one of: high, medium, low (default to medium if invalid)
+
+### Graceful Degradation:
+- Missing descriptions → Generate from available error information or "Investigation required based on available data"
+- Missing services → Use "unknown-service" with note to investigate service identification
+- Missing timestamps → Use current processing time with note about estimated timing
+- Missing root causes → Create generic investigation tickets with available error information
+
+## Input Data
+$INPUT_DATA
+
+## Ticket Structure
+
+### 1. Main Ticket (Parent)
+Create **ONE** main ticket that provides an overview of the entire incident:
+- **Title**: Cross-service incident summary from main_ticket.title
+- **Description**: High-level incident overview from main_ticket.description
+- **Labels**: ["main-issue", "incident", "cross-service", "automated"]
+- **Priority**: Use main_ticket.priority
+- **Services Involved**: List all services from main_ticket.services_involved
+
+### 2. Service Sub-Tickets (Children)
+Create **ONE sub-ticket per service** from root_causes_per_service:
+- **Title**: "[{service}] {primary_cause summary}"
+- **Description**: Service-specific root cause details
+- **Labels**: ["sub-issue", "service-specific", "automated", "{service}"]
+- **Parent Link**: Reference the main ticket ID in description
+- **Priority**: Inherit from main ticket or adjust based on service impact
+
+## 4-Tier Fallback Strategy
+
+For each ticket creation, attempt the following methods in order:
+
+### Tier 1: GitHub CLI
+```bash
+# Check availability
+gh auth status
+
+# Create main ticket
+gh issue create --repo {github_repo} --title "{title}" --body "{description}" --label "{labels}"
+
+# Create sub-tickets (after main ticket is created)
+gh issue create --repo {github_repo} --title "{title}" --body "**Parent Issue:** #{main_ticket_id}\n\n{description}" --label "{labels}"
+```
+
+### Tier 2: GitHub MCP Server
+```
+Use use_mcp_tool with GitHub MCP server:
+- server_name: "github-mcp-server" (or appropriate GitHub MCP server name)
+- tool_name: "create_issue"
+- arguments: {
+    "owner": "{repo_owner}",
+    "repo": "{repo_name}",
+    "title": "{title}",
+    "body": "{description}",
+    "labels": ["{labels}"]
+  }
+```
+
+### Tier 3: JIRA CLI (Alternative Platform)
+```bash
+# Check availability
+jira version
+
+# Create main ticket
+jira issue create --project {jira_project} --type "Bug" --summary "{title}" --description "{description}"
+
+# Create sub-tickets as Sub-tasks
+jira issue create --project {jira_project} --type "Sub-task" --parent {main_ticket_key} --summary "{title}" --description "{description}"
+```
+
+### Tier 4: JIRA MCP Server (Final Fallback)
+```
+Use use_mcp_tool with JIRA MCP server:
+- server_name: "atlassian-mcp-server" (or appropriate JIRA MCP server name)
+- tool_name: "create_issue"
+- arguments: {
+    "project": "{jira_project}",
+    "issue_type": "Bug", # or "Sub-task" for sub-tickets
+    "summary": "{title}",
+    "description": "{description}",
+    "parent": "{main_ticket_key}" # for sub-tickets only
+  }
+```
+
+## Implementation Steps
+
+### Step 1: Extract and Validate Data
+1. Apply the Data Extraction Process above to get main_ticket and root_causes_per_service
+2. Use Fallback Construction Rules if data is missing or incomplete
+3. Validate extracted data using Error Handling & Validation rules
+4. Ensure you have at least a basic main_ticket structure before proceeding
+
+### Step 2: Create Main Ticket
+1. Format title and description from extracted main_ticket data
+2. Determine platform based on input parameters (github_repo, jira_project, platform setting)
+3. Attempt creation using 4-tier fallback strategy
+4. **CRITICAL**: Save the main ticket ID/key for sub-ticket linking
+
+### Step 3: Create Service Sub-Tickets
+For each service in root_causes_per_service:
+1. Format service-specific title: "[{service}] {primary_cause.label}"
+2. Create detailed description with root cause analysis, error logs, and recommended actions
+3. Include parent ticket reference: "**Parent Issue:** #{main_ticket_id}"
+4. Add appropriate labels: ["sub-issue", "service-specific", "automated", "{service}"]
+5. Attempt creation using 4-tier fallback strategy
+6. Link to main ticket (GitHub: reference in description, JIRA: use parent field)
+
+### Step 4: Report Results
+Provide a comprehensive summary including:
+- Main ticket ID and URL
+- All sub-ticket IDs and URLs with their parent relationships
+- Platform used for each ticket
+- Any fallback attempts made
+- Data extraction method used
+- Any missing data that was constructed
+- Next steps for ticket management
+
+## Platform Selection Logic
+
+Based on the input parameters:
+- **github**: Use GitHub CLI → GitHub MCP → JIRA CLI → JIRA MCP
+- **jira**: Use JIRA CLI → JIRA MCP → GitHub CLI → GitHub MCP  
+- **both**: Create tickets on both platforms
+- **auto**: Prefer GitHub if github_repo provided, otherwise JIRA if jira_project provided, otherwise GitHub CLI
+
+## Error Handling
+
+If all 4 tiers fail for any ticket:
+1. Document the failure clearly with specific error messages
+2. Provide manual creation instructions with exact commands
+3. Continue with remaining tickets (don't stop the entire process)
+4. Include troubleshooting steps in the final report
+5. Suggest alternative approaches (email, Slack, manual creation)
+
+## Expected Output Format
+
+```
+✅ **Hierarchical Issue Creation Complete**
+
+## 📊 Data Extraction Summary
+**Method Used:** {Direct/Array/Analysis/Fallback}
+**Input Format:** {Format A/B/C/D}
+**Missing Data:** {List any constructed/missing data}
+
+## 🎫 Main Ticket (Parent)
+**Platform:** GitHub CLI
+**Issue ID:** #1234
+**URL:** https://github.com/owner/repo/issues/1234
+**Title:** Cross-service Authentication Failure
+**Priority:** High
+**Services:** authentication, user-service, database
+
+## 🔗 Service Sub-Tickets (Children)
+
+### 1. Authentication Service
+**Platform:** GitHub CLI  
+**Issue ID:** #1235
+**URL:** https://github.com/owner/repo/issues/1235
+**Parent:** #1234
+**Title:** [authentication] JWT Token Validation Failure
+
+### 2. User Service  
+**Platform:** GitHub CLI
+**Issue ID:** #1236
+**URL:** https://github.com/owner/repo/issues/1236
+**Parent:** #1234
+**Title:** [user-service] Database Connection Timeout
+
+## 🚀 Next Steps
+- Review main ticket #1234 for incident overview
+- Assign service sub-tickets to respective teams
+- Use ticket hierarchy for coordinated resolution
+- Update parent ticket when all sub-tickets are resolved
+
+## 🔧 Troubleshooting (if any failures occurred)
+- {List any failed attempts and suggested solutions}
+```
+
+Remember: The hierarchical structure ensures proper incident coordination while maintaining service-specific accountability. The flexible input handling ensures the tool works with any data format from the automated debugging workflow!

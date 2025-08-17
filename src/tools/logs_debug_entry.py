@@ -46,9 +46,9 @@ class LogsDebugEntryTool(BasePromptTool):
             # No LLM prompt needed; we just render a plan.
             prompt_filename=None,
         )
-        # Logs debug entry plan template (JSON with $nextTool / $argsJson / $reason)
+        # Use shared plan template (JSON with $nextTool / $argsJson / $reason)
         self._plan_tpl = Template(
-            (Path(__file__).parent.parent / "prompts" / "logs_debug_entry_plan_template.txt").read_text(encoding="utf-8")
+            (Path(__file__).parent.parent / "prompts" / "shared_plan_template.txt").read_text(encoding="utf-8")
         )
 
     def get_tool_definition(self) -> Tool:

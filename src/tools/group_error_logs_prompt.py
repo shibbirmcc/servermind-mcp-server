@@ -17,13 +17,12 @@ logger = structlog.get_logger(__name__)
 class GroupErrorLogsTool(BasePromptTool):
     """
     Step 5 in the chain.
-    Input: raw log message strings from Step 4 under arguments["logs"] (array of strings).
+    Input: log objects from Step 4 under arguments["logs"] (array of dict objects).
     Behavior: prompts the model (via group_error_logs_prompt.txt) to:
-      - detect trace/correlation IDs from the raw log content,
-      - semantically cluster messages (normalize/mask variables, merge near-duplicates),
-      - pick ONE representative id per cluster ("chosen_id"),
-      - output strict JSON: [{ pattern, template, count, chosen_id, all_ids?, sample_events[] }, ...].
-    Then: chains to extract_trace_ids_for_search to handle ID extraction and trace fetching.
+      - semantically group similar error messages by fuzzy matching
+      - extract one representative trace ID per group
+      - output simple JSON array of trace IDs: ["trace_id_1", "trace_id_2", ...]
+    Then: chains directly to splunk_trace_search_by_ids to fetch full trace details.
     """
 
     def __init__(self):
@@ -31,7 +30,7 @@ class GroupErrorLogsTool(BasePromptTool):
             tool_name="group_error_logs",
             description=(
                 "Group ERROR logs into semantic clusters and pick one representative trace/correlation ID per group. "
-                "Takes an array of raw log message strings, semantically groups similar error messages, "
+                "Takes an array of log objects (dict format), semantically groups similar error messages, "
                 "and selects one representative ID per group for trace fetching."
             ),
             prompt_filename="group_error_logs_prompt.txt",
@@ -49,12 +48,15 @@ class GroupErrorLogsTool(BasePromptTool):
                 "properties": {
                     "logs": {
                         "type": "array",
-                        "description": "Array of raw log messages (strings) from splunk_error_search.",
-                        "items": {"type": "string"}
+                        "description": "Array of log objects from splunk_error_search.",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": True
+                        }
                     },
                     "max_groups": {
                         "type": "integer",
-                        "description": "Soft cap for number of groups to aim for (model-level guidance).",
+                        "description": "Soft cap for number of groups to aim for (model-level guidance)",
                         "default": 10
                     }
                 },
@@ -65,117 +67,44 @@ class GroupErrorLogsTool(BasePromptTool):
     async def execute(self, arguments: Dict[str, Any]) -> List[TextContent]:
         # 1) basic input checks
         logs = arguments.get("logs")
+        max_groups = arguments.get("max_groups", 10)
+        
         if not isinstance(logs, list):
-            return [TextContent(type="text", text="❌ Expected 'logs' to be an array of raw log message strings.")]
+            return [TextContent(type="text", text="❌ Expected 'logs' to be an array of log objects.")]
         
-        # Validate that all items are strings
+        # Validate that all items are dict objects
         for i, log in enumerate(logs):
-            if not isinstance(log, str):
-                return [TextContent(type="text", text=f"❌ Expected all log entries to be strings. Item {i} is {type(log).__name__}.")]
+            if not isinstance(log, dict):
+                return [TextContent(type="text", text=f"❌ Expected all log entries to be dict objects. Item {i} is {type(log).__name__}.")]
         
-        max_groups = int(arguments.get("max_groups", 10))
-
-        # 2) Get the grouping prompt instructions (keep exactly as is)
-        prompt_instructions = self._get_prompt()
+        # Prepare next step args
+        next_step_args = {"field_name": "trace_id", "ids": ["<EXTRACTED_IDS>"]}
         
-        # 3) Add comprehensive workflow context and next-step emphasis
-        full_prompt = f"""{prompt_instructions}
+        # Use Template.substitute() with $ placeholders for shared template
+        next_tool = "splunk_trace_search_by_ids"
+        args_json = json.dumps(next_step_args)
+        reason = "Search for detailed trace events using the extracted trace IDs to build comprehensive timeline"
 
-WORKFLOW CONTEXT: This is Step 5 in a debugging chain. Your output directly feeds into Step 6.
-NEXT STEP: The chosen_id values from your groups will be used to fetch full traces via splunk_trace_search_by_ids.
-
-Please analyze the inputData below and provide the grouped error logs as specified above.
-
-CRITICAL WORKFLOW CONTINUATION REQUIREMENTS:
-- You MUST extract trace/correlation IDs from the log events
-- Every group MUST have a non-null chosen_id value
-- The workflow CANNOT continue without valid chosen_id values
-- After providing the JSON output, the system will automatically proceed to the NEXT STEP:
-  * Tool: splunk_trace_search_by_ids  
-  * Purpose: Fetch full trace details using the chosen_id values from your groups
-  * This next step is ESSENTIAL for the debugging workflow to continue
-
-MANDATORY SUCCESS CRITERIA:
-- Find trace_id, span_id, or parent_span_id fields in the log events
-- Use aggressive fallback strategies if primary fields are missing
-- NEVER output groups with null chosen_id values
-- The success of the entire debugging workflow depends on accurate chosen_id extraction
-
-EXAMPLE LOG STRUCTURE (for reference):
-{{
-  "trace_id": "57bd79f420bd4ddd9718c8d94d7e2858",
-  "span_id": "de0f343642384d19", 
-  "parent_span_id": "584c79270145481b",
-  "message": "Successfully connected to MySQL Server version 8.0.43",
-  "service_name": "demo-service-user",
-  "trace_context_found": true
-}}"""
-
-        # 4) Prepare the next step args for extract_trace_ids_for_search
-        next_step_args = {
-            "grouped_logs": "{{GROUPING_OUTPUT_JSON}}",  # Will be populated with the grouping result
-            "deduplicate": True,
-            "earliest_time": "-24h",
-            "latest_time": "now",
-            "max_results": 4000
-        }
+        # Simple template substitution - no string manipulation needed!
+        prompt_template = Template(self._get_prompt())
         
-        # 5) Construct JSON response manually with enhanced emphasis
-        response_data = {
-            "kind": "plan",
-            "prompt": full_prompt,
-            "inputData": arguments,
-            "next": [
-                {
-                    "type": "tool",
-                    "toolName": "extract_trace_ids_for_search",
-                    "args": next_step_args,
-                    "reason": "🔄 NEXT STEP: Extract trace IDs from the grouped error patterns and prepare for trace fetching. This intermediate step ensures proper ID validation and deduplication before proceeding to trace search."
-                }
-            ],
-            "autoExecuteHint": True,
-            "workflowNote": "The grouped error patterns will be processed to extract trace IDs, which will then be used for detailed trace fetching.",
-            "stepInfo": "Step 5 → Step 5.5: Error Grouping → ID Extraction"
-        }
-        response_json = json.dumps(response_data, indent=2)
+        # Generate the workflow template with substituted variables
+        workflow_template = self._plan_template.substitute(
+            nextTool=next_tool,
+            argsJson=args_json,
+            reason=reason
+        )
         
-        return [TextContent(type="text", text=response_json)]
+        full_prompt = prompt_template.substitute(
+            INPUT_LOGS=json.dumps(logs, indent=2),
+            MAX_GROUPS=max_groups,
+            WORKFLOW_TEMPLATE=workflow_template
+        )
+        
+        logger.info("Executing group error logs prompt", log_count=len(logs))
+        
+        return [TextContent(type="text", text=full_prompt)]
 
-    # --- helpers --------------------------------------------------------------
-
-    def _extract_groups_json(self, text: str) -> tuple[Optional[List[Dict[str, Any]]], str]:
-        """
-        Extracts the JSON array of groups from the LLM output.
-        - Allows an optional single warning line before the JSON (per prompt rules).
-        - Returns (groups, warning_prefix). If parsing fails, (None, "").
-        """
-        stripped = text.lstrip()
-        warning_prefix = ""
-        # If there is a leading warning line (starts with "⚠️" or plain text), keep it but strip before JSON.
-        if stripped.startswith("⚠️"):
-            # take first line as warning, keep it as-is
-            first_newline = stripped.find("\n")
-            if first_newline != -1:
-                warning_prefix = stripped[:first_newline].strip()
-                stripped = stripped[first_newline:].lstrip()
-            else:
-                # Warning only, no JSON
-                return None, warning_prefix
-
-        # Find the first '[' and last ']' to get the JSON array
-        start = stripped.find("[")
-        end = stripped.rfind("]")
-        if start == -1 or end == -1 or end < start:
-            return None, warning_prefix
-
-        json_blob = stripped[start:end + 1]
-        try:
-            data = json.loads(json_blob)
-            if isinstance(data, list):
-                return data, (warning_prefix + "\n" if warning_prefix else "")
-            return None, warning_prefix
-        except Exception:
-            return None, warning_prefix
 
 
 # Global instance + exports
