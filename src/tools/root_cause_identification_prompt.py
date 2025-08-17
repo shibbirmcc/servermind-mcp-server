@@ -93,47 +93,36 @@ class RootCauseIdentificationPromptTool(BasePromptTool):
         mode = arguments.get("mode", "auto")
         confidence_floor = float(arguments.get("confidence_floor", 0.6))
 
-        # 2) Get the root cause identification prompt instructions (keep exactly as is)
-        prompt_instructions = self._get_prompt()
-        
-        # Add instruction to analyze the inputData
-        full_prompt = f"""{prompt_instructions}
+        # Prepare the next step args
+        next_step_args = {
+            "analysis": analysis,  # Pass through the original analysis
+            "root_cause": "{{RESULT_FROM_ANALYSIS}}",  # Placeholder for root cause results
+            "title_prefix": "",
+            "mode": "auto"
+        }
 
-Please analyze the inputData below and provide the root cause identification as specified above."""
+        # Use Template.substitute() with $ placeholders for shared template
+        next_tool = "automated_issue_creation"
+        args_json = json.dumps(next_step_args)
+        reason = "Create GitHub/JIRA issues directly from root cause analysis"
 
-        # Prepare the arguments for the prompt
-        prompt_arguments = {
+        # Format input data with mode and confidence_floor
+        input_data = {
             "analysis": analysis,
             "mode": mode,
             "confidence_floor": confidence_floor
         }
 
-        # Prepare the next step args
-        next_step_args = {
-            "analysis": analysis,  # Pass through the original analysis
-            "root_cause": "{{RESULT_FROM_ROOT_CAUSE}}",  # Placeholder for root cause results
-            "title_prefix": "",
-            "mode": "auto"
-        }
+        # Simple template substitution - no string manipulation needed!
+        prompt_template = Template(self._get_prompt())
+        full_prompt = prompt_template.substitute(
+            INPUT_ANALYSIS=json.dumps(input_data, indent=2),
+            nextTool=next_tool,
+            argsJson=args_json,
+            reason=reason
+        )
         
-        # Construct JSON response using enhanced shared plan template
-        response_data = {
-            "kind": "plan",
-            "prompt": full_prompt,
-            "inputData": prompt_arguments,
-            "next": [
-                {
-                    "type": "tool",
-                    "toolName": "ticket_split_prepare",
-                    "args": next_step_args,
-                    "reason": "Create ticket-ready items by combining cross-service analysis with per-service root causes"
-                }
-            ],
-            "autoExecuteHint": True
-        }
-        response_json = json.dumps(response_data, indent=2)
-        
-        return [TextContent(type="text", text=response_json)]
+        return [TextContent(type="text", text=full_prompt)]
 
 
 # Global instance / exports

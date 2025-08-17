@@ -107,12 +107,12 @@ class SplunkIndexesTool:
             plan_json = PLAN_TEMPLATE.substitute(
                 nextTool="splunk_error_search",  # Jump directly to search tool
                 argsJson=json.dumps({
-                    "query": f"index={' OR index='.join(index_names)} | head 100",
+                    "indices": index_names,  # Pass array of index names
                     "earliest_time": "-24h",
                     "latest_time": "now",
-                    "max_results": 100
+                    "max_results": 500  # Match splunk_error_search default
                 }, ensure_ascii=False),
-                reason="Indexes listed — proceed to search across all available indexes."
+                reason="Indexes listed — proceed to search for errors across all available indexes."
             )
 
             formatted_results = self._format_indexes_results(indexes, filter_pattern, sort_by, sort_order)

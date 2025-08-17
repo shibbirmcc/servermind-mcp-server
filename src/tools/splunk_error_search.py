@@ -27,7 +27,7 @@ from pathlib import Path
 from string import Template
 import structlog
 from mcp.types import Tool, TextContent
-from .search import execute_splunk_query
+from .search import execute_splunk_query_raw_only
 
 logger = structlog.get_logger(__name__)
 
@@ -43,8 +43,19 @@ class SplunkErrorSearchTool:
         return Tool(
             name="splunk_error_search",
             description=(
-                "Direct error search in specific indexes (when you know exact indexes to search). "
-                "Searches for 'ERROR' or 'error' logs with auto-broadening time ranges if needed."
+                "Search for error logs in Splunk indices. Use this tool in two scenarios:\n\n"
+                "1. **Initial workflow step**: When routing from splunk_indexes with structured parameters\n"
+                "2. **User feedback routing**: When user provides feedback after 'no logs found' and you can confidently extract specific indices\n\n"
+                "User feedback examples that should route here:\n"
+                "- 'try payment indices instead' → extract ['prod_payments', 'prod_billing']\n"
+                "- 'search the auth logs' → extract ['prod_auth', 'prod_authentication']\n"
+                "- 'use prod_users and prod_billing' → extract ['prod_users', 'prod_billing']\n"
+                "- 'search longer time range' → use same indices, extend earliest_time\n\n"
+                "Only use if you can confidently (≥70%) extract specific index names. If user feedback is vague "
+                "('try other stuff', 'search somewhere else'), ask for clarification instead.\n\n"
+                "Alternative routing:\n"
+                "- If user wants to explore available indices first → use splunk_indexes\n"
+                "- If user wants to start completely over → use logs_debug_entry"
             ),
             inputSchema={
                 "type": "object",
@@ -52,11 +63,11 @@ class SplunkErrorSearchTool:
                     "indices": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "List of Splunk indices to search."
+                        "description": "Specific Splunk index names to search (e.g., ['prod_payments', 'prod_auth'])"
                     },
                     "earliest_time": {
                         "type": "string",
-                        "description": "Start time for search (e.g., '-24h', '-2d'). If omitted, will auto-broaden."
+                        "description": "Start time for search. Use '-24h' for initial searches, extend to '-48h', '-7d' for retry scenarios. If omitted, will auto-broaden."
                     },
                     "latest_time": {
                         "type": "string",
@@ -69,6 +80,10 @@ class SplunkErrorSearchTool:
                         "default": 500,
                         "minimum": 1,
                         "maximum": 10000
+                    },
+                    "context_note": {
+                        "type": "string",
+                        "description": "Optional note about why this search is being performed (e.g., 'user requested payment indices', 'retry with longer time range')"
                     }
                 },
                 "required": ["indices"]
@@ -101,17 +116,15 @@ class SplunkErrorSearchTool:
 
                 logger.info("Running Splunk error search", query=spl, earliest_time=tr, latest_time=latest_time)
 
-                search_payload = await execute_splunk_query(
+                raw_logs = await execute_splunk_query_raw_only(
                     query=spl,
                     earliest_time=tr,
                     latest_time=latest_time,
                     max_results=max_results
                 )
 
-                results = search_payload.get("results", [])
-
-                if results:
-                    found_results = search_payload
+                if raw_logs:
+                    found_results = raw_logs
                     used_range = tr
                     break
 
@@ -138,13 +151,12 @@ class SplunkErrorSearchTool:
             # If found logs and invoked as part of chain → send plan for grouping
             plan_text = self._plan_tpl.substitute(
                 nextTool="group_error_logs",
-                argsJson=json.dumps({"logs": found_results["results"]}, ensure_ascii=False),
+                argsJson=json.dumps({"logs": found_results}, ensure_ascii=False),
                 reason=f"Found error logs in the last {used_range[1:]} hours, proceed to group them by similarity."
             )
 
             return [
-                TextContent(type="text", text=f"JSON_OUTPUT:\n{json.dumps(found_results)}"),  # raw logs
-                TextContent(type="text", text=plan_text)                  # plan to next step
+                TextContent(type="text", text=plan_text)  # plan to next step with logs included
             ]
 
         except Exception as e:

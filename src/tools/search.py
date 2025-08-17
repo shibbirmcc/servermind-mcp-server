@@ -210,6 +210,30 @@ async def execute_splunk_query(query: str, earliest_time: str = "-24h",
     }
 
 
+async def execute_splunk_query_raw_only(query: str, earliest_time: str = "-24h", 
+                                       latest_time: str = "now", max_results: int = 100, 
+                                       timeout: int = 300) -> List[dict]:
+    """
+    Execute Splunk query and return only _raw fields as dict objects.
+    Useful for log analysis tools that need the actual log content in dict format.
+    
+    Args:
+        query: SPL query string
+        earliest_time: Start time for search
+        latest_time: End time for search  
+        max_results: Maximum number of results
+        timeout: Search timeout in seconds
+        
+    Returns:
+        List[dict]: List of dict objects containing _raw field
+        
+    Raises:
+        Exception: If search fails
+    """
+    full_results = await execute_splunk_query(query, earliest_time, latest_time, max_results, timeout)
+    return [{"_raw": result.get("_raw", "")} for result in full_results.get("results", [])]
+
+
 def get_search_tool() -> SplunkSearchTool:
     """Get the global search tool instance."""
     return _search_tool

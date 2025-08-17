@@ -18,9 +18,6 @@ class SplunkLogAnalysisPromptTool(BasePromptTool):
             description="Analyze traces and generate narrative analysis with cross-service story and per-service breakdown",
             prompt_filename="analyze_traces_narrative.txt"
         )
-        # Load the plan template for chaining
-        self._plan_tpl_path = Path(__file__).parent.parent / "prompts" / "shared_plan_template.txt"
-        self._plan_tpl = Template(self._plan_tpl_path.read_text(encoding="utf-8"))
 
     def get_tool_definition(self) -> Tool:
         return Tool(
@@ -78,46 +75,35 @@ class SplunkLogAnalysisPromptTool(BasePromptTool):
         mode = arguments.get("mode", "auto")
         verbosity = arguments.get("verbosity", "normal")
 
-        # Get the trace analysis prompt instructions (keep exactly as is)
-        prompt_instructions = self._get_prompt()
-        
-        # Add instruction to analyze the inputData
-        full_prompt = f"""{prompt_instructions}
-
-Please analyze the inputData below and provide the narrative analysis as specified above."""
-
-        # Prepare the arguments for the prompt
-        prompt_arguments = {
-            "traces": traces,
-            "mode": mode,
-            "verbosity": verbosity
-        }
-
         # Prepare the next step args
         next_step_args = {
             "analysis": "{{RESULT_FROM_ANALYSIS}}",  # Placeholder for analysis results
             "mode": "auto",
             "confidence_floor": 0.6
         }
-        
-        # Construct JSON response using enhanced shared plan template
-        response_data = {
-            "kind": "plan",
-            "prompt": full_prompt,
-            "inputData": prompt_arguments,
-            "next": [
-                {
-                    "type": "tool",
-                    "toolName": "root_cause_identification_prompt",
-                    "args": next_step_args,
-                    "reason": "Confirm service-level root causes based on narrative analysis and prepare for ticket creation"
-                }
-            ],
-            "autoExecuteHint": True
+
+        # Use Template.substitute() with $ placeholders for shared template
+        next_tool = "root_cause_identification_prompt"
+        args_json = json.dumps(next_step_args)
+        reason = "Confirm service-level root causes based on narrative analysis and prepare for ticket creation"
+
+        # Format input data with mode and verbosity
+        input_data = {
+            "traces": traces,
+            "mode": mode,
+            "verbosity": verbosity
         }
-        response_json = json.dumps(response_data, indent=2)
+
+        # Simple template substitution - no string manipulation needed!
+        prompt_template = Template(self._get_prompt())
+        full_prompt = prompt_template.substitute(
+            INPUT_TRACES=json.dumps(input_data, indent=2),
+            nextTool=next_tool,
+            argsJson=args_json,
+            reason=reason
+        )
         
-        return [TextContent(type="text", text=response_json)]
+        return [TextContent(type="text", text=full_prompt)]
 
     # --- helpers ---
     def _coerce_to_traces(self, args: Dict[str, Any]) -> List[Dict[str, Any]]:
