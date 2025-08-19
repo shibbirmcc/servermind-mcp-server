@@ -6,7 +6,7 @@ A comprehensive Model Context Protocol (MCP) server which provides seamless inte
 
 ServerMind MCP Server is a Splunk-focused MCP server that provides advanced log analysis and automated issue creation capabilities:
 
-- **Splunk Integration**: Execute SPL queries, analyze logs, and monitor systems
+- **Splunk Integration**: Execute SPL (Search Processing Language) queries, analyze logs, and monitor systems
 - **Automated Issue Creation**: Analyze Splunk errors and automatically create issues via external MCP servers
 - **External MCP Integration**: Leverages Atlassian and GitHub MCP servers for issue creation
 
